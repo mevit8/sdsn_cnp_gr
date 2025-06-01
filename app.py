@@ -29,7 +29,7 @@ scenarios = sorted(set(df_costs["Scenario"]).intersection(
 selected_scenario = st.sidebar.selectbox("🎯 Select Scenario", scenarios)
 
 # Tabs
-tab1, tab2, tab3, tab4 = st.tabs(theme.TAB_TITLES)
+tab1, tab2, tab3, tab4, tab5 = st.tabs(theme.TAB_TITLES)
 
 with tab1:
     cols = ["FertilizerCost", "LabourCost", "MachineryRunningCost", "DieselCost", "PesticideCost"]
@@ -52,4 +52,10 @@ with tab4:
     cols = ["Residential", "Agriculture", "Industry", "Energy Products",
             "Terrestrial Transportation", "Aviation", "Maritime", "Services"]
     melted, years = prepare_stacked_data(df_energy, selected_scenario, "Year", cols)
-    render_bar_chart(melted, "YearStr", "Value", "Component", "Energy Demand by Sector", [str(y) for y in years])
+    render_bar_chart(melted, "YearStr", "Value", "Component", "Total Energy Consumption per Sector", [str(y) for y in years])
+    
+with tab5:
+    cols = ["Residential", "Agriculture", "Industry", "Energy Products",
+            "Terrestrial Transportation", "Aviation", "Maritime", "Services"]
+    melted, years = prepare_stacked_data(df_energy, selected_scenario, "Year", cols)
+    render_bar_chart(melted, "YearStr", "Value", "Component", "Final Energy Consumption by Sector", [str(y) for y in years])
