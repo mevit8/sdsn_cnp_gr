@@ -21,6 +21,8 @@ df_costs = load_and_prepare_excel("data/Fable_46_Agricultural.xlsx")
 df_emissions = load_and_prepare_excel("data/Fable_46_GHG.xlsx")
 df_land = load_and_prepare_excel("data/Fable_46_Land.xlsx")
 df_energy = load_and_prepare_excel("data/LEAP_Demand_Cons.xlsx")
+df_energy_supply = load_and_prepare_excel("data/LEAP_Supply.xlsx")
+
 
 # Shared scenario selector
 scenarios = sorted(set(df_costs["Scenario"]).intersection(
@@ -29,7 +31,7 @@ scenarios = sorted(set(df_costs["Scenario"]).intersection(
 selected_scenario = st.sidebar.selectbox("🎯 Select Scenario", scenarios)
 
 # Tabs
-tab1, tab2, tab3, tab4, tab5 = st.tabs(theme.TAB_TITLES)
+tab1, tab2, tab3, tab4, tab5, tab6= st.tabs(theme.TAB_TITLES)
 
 with tab1:
     cols = ["FertilizerCost", "LabourCost", "MachineryRunningCost", "DieselCost", "PesticideCost"]
@@ -53,9 +55,15 @@ with tab4:
             "Terrestrial Transportation", "Aviation", "Maritime", "Services"]
     melted, years = prepare_stacked_data(df_energy, selected_scenario, "Year", cols)
     render_bar_chart(melted, "YearStr", "Value", "Component", "Total Energy Consumption per Sector", [str(y) for y in years])
-    
+
 with tab5:
     cols = ["Residential", "Agriculture", "Industry", "Energy Products",
             "Terrestrial Transportation", "Aviation", "Maritime", "Services"]
     melted, years = prepare_stacked_data(df_energy, selected_scenario, "Year", cols)
     render_bar_chart(melted, "YearStr", "Value", "Component", "Final Energy Consumption by Sector", [str(y) for y in years])
+
+with tab6:
+    cols = ["Hydrogen Generation", "Electricity Generation", "Heat Generation", "Oil Refining"]
+    melted, years = prepare_stacked_data(df_energy_supply, selected_scenario, "Year", cols)
+    render_bar_chart(melted, "YearStr", "Value", "Component", "Synthetic Fuels by Source", [str(y) for y in years])
+
