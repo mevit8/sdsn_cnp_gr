@@ -8,6 +8,7 @@ TAB_TITLES = [
     "🌾 Land Use",
     "⚡ Energy Demand",
     "🌐 Energy Consumption",
-    "🛢️ Enery per Fuel"
+    "🛢️ Enery per Fuel",
+    "♨️ Supply Emissions"
     
 ]
