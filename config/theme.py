@@ -3,12 +3,11 @@ LOGO_PATH = "static/logo.png"
 LOGO_WIDTH = 160
 SIDEBAR_TITLE = "### SDSN GCH Scenarios"
 TAB_TITLES = [
-    "💰 Costs",
-    "🌱 Emissions",
-    "🌾 Land Use",
-    "⚡ Energy Demand",
-    "🌐 Energy Consumption",
-    "🛢️ Enery per Fuel",
-    "♨️ Supply Emissions"
-    
-]
+    "🌱 Agri Emissions",
+    "💰 Agri Costs",
+    "🌾 Agri Land Use",
+    "⚡ Energy Consumption",
+    "🌐 Energy Consumption Emissions",
+    "🛢️ Energy per Fuel",
+    "♨️ Energy Fuel Emissions"
+  ]

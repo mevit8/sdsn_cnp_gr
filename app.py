@@ -37,40 +37,40 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(theme.TAB_TITLES)
 with tab1:
     cols = ["FertilizerCost", "LabourCost", "MachineryRunningCost", "DieselCost", "PesticideCost"]
     melted, years = prepare_stacked_data(df_costs, selected_scenario, "Year", cols)
-    render_bar_chart(melted, "YearStr", "Value", "Component", "Costs by Component", [str(y) for y in years])
+    render_bar_chart(melted, "YearStr", "Value", "Component", "Production-based agricultural emissions", [str(y) for y in years])
 
 with tab2:
     cols = ["CropCO2e", "LiveCO2e", "LandCO2", "FAOTotalCO2e"]
     melted, years = prepare_stacked_data(df_emissions, selected_scenario, "Year", cols)
-    render_bar_chart(melted, "YearStr", "Value", "Component", "Emissions by Component", [str(y) for y in years])
+    render_bar_chart(melted, "YearStr", "Value", "Component", "Agricultural production cost", [str(y) for y in years])
 
 with tab3:
     cols = ["FAOCropland", "FAOHarvArea", "FAOPasture", "FAOUrban", "FAOForest", "FAOOtherLand"]
     df_filtered = df_land[df_land["Scenario"] == selected_scenario].copy()
     df_filtered[cols] = df_filtered[cols].fillna(0)
     melted = df_filtered.melt(id_vars=["Year"], value_vars=cols, var_name="Component", value_name="Value")
-    render_line_chart(melted, "Year", "Value", "Component", "Land Area by Type")
+    render_line_chart(melted, "Year", "Value", "Component", "Land uses evolution")
 
 with tab4:
     cols = ["Residential", "Agriculture", "Industry", "Energy Products",
             "Terrestrial Transportation", "Aviation", "Maritime", "Services"]
     melted, years = prepare_stacked_data(df_energy, selected_scenario, "Year", cols)
-    render_bar_chart(melted, "YearStr", "Value", "Component", "Total Energy Consumption per Sector", [str(y) for y in years])
+    render_bar_chart(melted, "YearStr", "Value", "Component", "Total energy consumption per sector", [str(y) for y in years])
 
 with tab5:
     cols = ["Residential", "Agriculture", "Industry", "Energy Products",
             "Terrestrial Transportation", "Aviation", "Maritime", "Services"]
     melted, years = prepare_stacked_data(df_energy, selected_scenario, "Year", cols)
-    render_bar_chart(melted, "YearStr", "Value", "Component", "Final Energy Consumption by Sector", [str(y) for y in years])
+    render_bar_chart(melted, "YearStr", "Value", "Component", "Emissions energy consumption by sector", [str(y) for y in years])
 
 with tab6:
     cols = ["Hydrogen Generation", "Electricity Generation", "Heat Generation", "Oil Refining"]
     melted, years = prepare_stacked_data(df_energy_supply, selected_scenario, "Year", cols)
-    render_bar_chart(melted, "YearStr", "Value", "Component", "Synthetic Fuels by Source", [str(y) for y in years])
+    render_bar_chart(melted, "YearStr", "Value", "Component", "Generated energy per fuel type", [str(y) for y in years])
 
 with tab7:
     cols = ["Electricity Generation", "Heat Generation", "Oil Refining"]
     melted, years = prepare_stacked_data(df_supply_emissions, selected_scenario, "Year", cols)
-    render_bar_chart(melted, "YearStr", "Value", "Component", "Supply Emissions by Sector", [str(y) for y in years])
+    render_bar_chart(melted, "YearStr", "Value", "Component", "Emissions from energy generation", [str(y) for y in years])
 
 
