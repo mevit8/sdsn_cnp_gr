@@ -9,5 +9,7 @@ TAB_TITLES = [
     "⚡ Energy Consumption",
     "🌐 Energy Consumption Emissions",
     "🛢️ Energy per Fuel",
-    "♨️ Energy Fuel Emissions"
-  ]
+    "♨️ Energy Fuel Emissions",
+    # "🌿⛽ Biofuels"  # ← new/updated
+]
+

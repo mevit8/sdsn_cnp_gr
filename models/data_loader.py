@@ -22,3 +22,4 @@ def prepare_stacked_data(df, scenario, year_col, value_cols):
     )
     melted["YearStr"] = melted[year_col].astype(str)
     return melted, five_years
+
