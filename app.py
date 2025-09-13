@@ -8,6 +8,46 @@ from pathlib import Path
 
 st.set_page_config(page_title="SDSN GCH Scenarios", layout="wide")
 
+import pandas as pd
+
+def aggregate_to_periods(
+    df: pd.DataFrame,
+    year_col: str = "Year",
+    value_col: str = "Value",
+    component_col: str = "Component",
+    period_years: int = 4,
+    agg: str = "mean",   # or "sum"
+    label_mode: str = "range",  # "range" -> "2000–2003", "start" -> "2000"
+):
+    """
+    Bin annual rows into N-year periods and aggregate by Component.
+    Returns (df_period, period_order_str_list).
+    """
+    df = df.copy()
+    # base = 0 (calendar aligned). If you want to align to a specific start, change the modulo base.
+    start = (df[year_col].min() // period_years) * period_years
+    # Compute period start
+    df["PeriodStart"] = ((df[year_col] - start) // period_years) * period_years + start
+    df["PeriodEnd"] = df["PeriodStart"] + (period_years - 1)
+
+    if label_mode == "range":
+        df["PeriodStr"] = df["PeriodStart"].astype(str) + "–" + df["PeriodEnd"].astype(str)
+    else:
+        df["PeriodStr"] = df["PeriodStart"].astype(str)
+
+    # Aggregate within each period by component
+    if agg == "sum":
+        grouped = df.groupby(["PeriodStart", "PeriodStr", component_col], as_index=False)[value_col].sum()
+    else:
+        grouped = df.groupby(["PeriodStart", "PeriodStr", component_col], as_index=False)[value_col].mean()
+
+    # Build category order for x-axis
+    period_order = grouped.drop_duplicates(subset=["PeriodStart", "PeriodStr"]) \
+                          .sort_values("PeriodStart")["PeriodStr"].tolist()
+
+    return grouped, period_order
+
+
 # Resolve paths relative to this file
 BASE_DIR = Path(__file__).parent
 CSS_PATH = BASE_DIR / "static" / "style.css"
@@ -81,32 +121,68 @@ with tab4:
     cols = ["Residential", "Agriculture", "Industry", "Energy Products",
             "Terrestrial Transportation", "Aviation", "Maritime", "Services"]
     melted, years = prepare_stacked_data(df_energy, selected_scenario, "Year", cols)
-    render_bar_chart(melted, "YearStr", "Value", "Component", "Total energy consumption per sector", [str(y) for y in years])
+    
+    period_df, period_order = aggregate_to_periods(
+        melted,
+        year_col="Year",
+        value_col="Value",
+        component_col="Component",
+        period_years=4,
+        agg="mean",         # or "sum"
+        label_mode="range"  # "range" -> "2000–2003"; "start" -> "2000"
+    )
+    render_bar_chart(
+        period_df, "PeriodStr", "Value", "Component",
+        "Total energy consumption per sector",
+        period_order,
+        tick_every_years=None  # not needed; x is now periods
+    )
+
 
 with tab5:
     cols = ["Residential", "Agriculture", "Industry", "Energy Products",
             "Terrestrial Transportation", "Aviation", "Maritime", "Services"]
     melted, years = prepare_stacked_data(df_energy, selected_scenario, "Year", cols)
-    render_bar_chart(melted, "YearStr", "Value", "Component", "Emissions energy consumption by sector", [str(y) for y in years])
+    period_df, period_order = aggregate_to_periods(
+        melted, year_col="Year", value_col="Value", component_col="Component",
+        period_years=4, agg="mean", label_mode="range"
+    )
+
+    render_bar_chart(
+        period_df, "PeriodStr", "Value", "Component",
+        "Emissions energy consumption by sector",
+        period_order
+    )
 
 with tab6:
     cols = ["Hydrogen Generation", "Electricity Generation", "Heat Generation", "Oil Refining"]
     melted, years = prepare_stacked_data(df_energy_supply, selected_scenario, "Year", cols)
+    
+    period_df, period_order = aggregate_to_periods(
+        melted, year_col="Year", value_col="Value", component_col="Component",
+        period_years=4, agg="mean", label_mode="range"
+    )
+
     render_bar_chart(
-        melted, "YearStr", "Value", "Component",
-        "Generated energy per fuel type", [str(y) for y in years],
-        colors=theme.FUEL_COLORS   
+        period_df, "PeriodStr", "Value", "Component",
+        "Generated energy per fuel type",
+        period_order,
+        colors=theme.FUEL_COLORS
     )
 
 with tab7:
     cols = ["Electricity Generation", "Heat Generation", "Oil Refining"]
     melted, years = prepare_stacked_data(df_supply_emissions, selected_scenario, "Year", cols)
-    render_bar_chart(
-        melted, "YearStr", "Value", "Component",
-        "Emissions from energy generation", [str(y) for y in years],
-        colors=theme.FUEL_COLORS   
+    period_df, period_order = aggregate_to_periods(
+        melted, year_col="Year", value_col="Value", component_col="Component",
+        period_years=4, agg="mean", label_mode="range"
     )
 
-
+    render_bar_chart(
+        period_df, "PeriodStr", "Value", "Component",
+        "Generated energy per fuel type",
+        period_order,
+        colors=theme.FUEL_COLORS
+    )
 
 

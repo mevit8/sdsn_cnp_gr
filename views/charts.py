@@ -4,6 +4,7 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 from config import theme
+from typing import Optional
 
 ColorSpec = Union[Dict[str, str], List[str], None]
 
@@ -44,7 +45,7 @@ def _build_px_colors(df, color_col: str, colors: ColorSpec):
 
     return color_discrete_map, color_discrete_sequence
 
-
+'''
 def render_bar_chart(
     df,
     x: str,
@@ -85,8 +86,55 @@ def render_bar_chart(
     if x_order:
         fig.update_xaxes(type="category", categoryorder="array", categoryarray=x_order)
 
-    st.plotly_chart(fig, use_container_width=use_container_width)
+    st.plotly_chart(fig, use_container_width=use_container_width) 
 
+'''
+def render_bar_chart(
+    df,
+    x,
+    y,
+    color,
+    title,
+    x_category_order,
+    colors=None,
+    tick_every_years: Optional[int] = None,
+    start_year: Optional[int] = None,
+    plot: bool = True,
+):
+    """
+    Renders a bar chart with optional tick_every_years to show only
+    every Nth year on categorical year axes (e.g., YearStr).
+    """
+    fig = px.bar(
+        df,
+        x=x,
+        y=y,
+        color=color,
+        title=title,
+        category_orders={x: x_category_order},
+        color_discrete_map=colors if isinstance(colors, dict) else None,
+        color_discrete_sequence=None if isinstance(colors, dict) else colors,
+    )
+
+    if tick_every_years:
+        years_int = []
+        for v in x_category_order:
+            try:
+                years_int.append(int(v))
+            except Exception:
+                pass
+        if years_int:
+            base = start_year if start_year is not None else min(years_int)
+            base -= base % tick_every_years
+            tickvals = [str(y) for y in years_int if (y - base) % tick_every_years == 0]
+            if tickvals:
+                fig.update_xaxes(tickmode="array", tickvals=tickvals, ticktext=tickvals)
+
+    if plot:
+        import streamlit as st
+        st.plotly_chart(fig, use_container_width=True)
+
+    return fig
 
 def render_line_chart(
     df,
