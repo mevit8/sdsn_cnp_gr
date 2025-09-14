@@ -7,6 +7,8 @@ from views.charts import render_sankey
 from PIL import Image
 import os
 from pathlib import Path
+import plotly.graph_objects as go
+
 
 st.set_page_config(page_title="SDSN GCH Scenarios", layout="wide")
 
@@ -92,30 +94,25 @@ else:
     st.sidebar.info(f"Logo not found at: {LOGO_PATH}")
 
 @st.cache_data(show_spinner=False)
-def load_biofuels_leaps_output(path: str = "data/LEAP_Biofuels.xlsx"):
+def load_biofuels_simple(path: str = "data/LEAP_Biofuels.xlsx", sheet: str = "Biofuels") -> pd.DataFrame:
     import pandas as pd
+    df = pd.read_excel(path, sheet_name=sheet)
 
-    # Row 37 has the years (left block + right block duplicates)
-    df = pd.read_excel(path, sheet_name="LEAPs output", header=37)
+    # Normalize column names (strip spaces)
+    df = df.rename(columns={c: str(c).strip() for c in df.columns})
 
-    # Column 1 holds the row labels we need
-    metric_col = df.columns[1]
-    df = df.rename(columns={metric_col: "Metric"})
+    required = ["Year", "MinProd_ktoe", "MaxProd_ktoe", "Demand_BAU_ktoe", "Demand_NCNC_ktoe"]
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing columns in '{sheet}': {missing}")
 
-    # Identify year columns: ints = left block; floats with .1 = right block
-    num_cols = [c for c in df.columns if isinstance(c, (int, float))]
-    left_years = sorted([int(c) for c in num_cols if float(c).is_integer()])
-    right_years = sorted([c for c in num_cols if not float(c).is_integer()])  # e.g., 2022.1
+    # Numbers
+    df["Year"] = pd.to_numeric(df["Year"], errors="coerce").astype("Int64")
+    for c in df.columns:
+        if c != "Year":
+            df[c] = pd.to_numeric(df[c], errors="coerce")
 
-    # Keep only the useful columns
-    keep_cols = ["Metric"] + left_years + right_years
-    df = df.loc[:, keep_cols].copy()
-
-    # Coerce numeric values and fill NaNs
-    for c in left_years + right_years:
-        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
-
-    return df, left_years, right_years
+    return df
 
 
 # Load data
@@ -126,8 +123,7 @@ df_energy = load_and_prepare_excel("data/LEAP_Demand_Cons.xlsx")
 df_energy_supply = load_and_prepare_excel("data/LEAP_Supply.xlsx")
 df_supply_emissions = load_and_prepare_excel("data/LEAP_Supply_Emissions.xlsx")
 df_energy_balance = load_energy_balance("data/LEAP_Energy_Balance.xlsx")
-df_biofuels_out, bio_left_years, bio_export_years = load_biofuels_leaps_output("data/LEAP_Biofuels.xlsx")
-
+df_biofuels = load_biofuels_simple("data/LEAP_Biofuels.xlsx")
 
 
 # Shared scenario selector
@@ -173,7 +169,6 @@ def build_sankey_from_balance(df: pd.DataFrame, scenario: str | None = None) -> 
         df = df[df["Scenario"] == scenario].copy()
         # if multiple rows per Flow, aggregate them
         df = df.groupby("Flow", as_index=False).sum(numeric_only=True)
-
     carriers = [c for c in df.columns if c not in ("Flow", "Total", "Scenario")]
 
     links = []
@@ -370,45 +365,92 @@ with tab8:
             )
     except Exception as e:
         st.error(f"Failed to build Sankey: {e}")
-
 with tab9:
-    st.subheader("🌿 Biofuels – Demand vs Potential Supply")
+    st.subheader("🌿 Biofuels")
 
-    # Exact labels from the sheet (column 'Metric')
-    BAR_ROWS = [
-        "Minimum Production Potential [ktoe]",
-        "Maximum Production Potential [ktoe]",
-    ]
-    LINE_ROWS = {
-        "BAU":  "Biofuel Demand Baseline scenario [ktoe]",
-        "NCNC": "Biofuel Demand NECP [ktoe]",
-    }
-    demand_row_name = LINE_ROWS.get(selected_scenario, "Biofuel Demand Baseline scenario [ktoe]")
+    scen = (selected_scenario or "").strip().upper()
+    scen_key = "BAU" if scen == "BAU" else "NCNC"  # default to NCNC for anything else
 
-    # ---- Bars (min/max production potential) from left-year block ----
-    bar_src = df_biofuels_out[df_biofuels_out["Metric"].isin(BAR_ROWS)].copy()
-    bar_long = bar_src.melt(id_vars=["Metric"], value_vars=bio_left_years,
-                            var_name="Year", value_name="Value")
-    bar_long["Year"] = bar_long["Year"].astype(int)
-    bar_long = bar_long.rename(columns={"Metric": "Component"})
-
-    # ---- Line (demand for selected scenario) from left-year block ----
-    line_src = df_biofuels_out[df_biofuels_out["Metric"] == demand_row_name].copy()
-    line_long = line_src.melt(id_vars=["Metric"], value_vars=bio_left_years,
-                              var_name="Year", value_name="Value")
-    line_long["Year"] = line_long["Year"].astype(int)
-    line_long = line_long.rename(columns={"Metric": "Component"})
-
+    # -----------------------------
+    # a) Demand vs Potential Supply
+    # -----------------------------
     st.markdown("**a) Biofuels demand and potential supply [ktoe]**")
+
+    # Bars: Min/Max production potential
+    bar_long = (
+        df_biofuels
+        .melt(id_vars=["Year"], value_vars=["MinProd_ktoe", "MaxProd_ktoe"],
+              var_name="Component", value_name="Value")
+        .replace({"Component": {
+            "MinProd_ktoe": "Minimum Production Potential [ktoe]",
+            "MaxProd_ktoe": "Maximum Production Potential [ktoe]",
+        }})
+    )
+
+    # Line: chosen demand series
+    demand_col = "Demand_BAU_ktoe" if scen_key == "BAU" else "Demand_NCNC_ktoe"
+    line_long = (
+        df_biofuels[["Year", demand_col]]
+        .rename(columns={demand_col: "Value"})
+        .assign(Component=f"Demand ({'Baseline' if scen_key=='BAU' else 'NECP'}) [ktoe]")
+    )
+
     render_grouped_bar_and_line(
         prod_df=bar_long,
         demand_df=line_long,
         x_col="Year",
         y_col="Value",
         category_col="Component",
-        title=f"Biofuels demand vs potential supply ({selected_scenario})",
+        title=f"Biofuels demand vs potential supply ({scen_key})",
     )
 
+    # -----------------------------
+    # b) Potential for Biofuels Export
+    # -----------------------------
+    st.markdown("**b) Potential for Biofuels Export [ktoe]**")
 
+    # Prefer explicit export cols; otherwise compute from potential − demand
+    if scen_key == "BAU":
+        col_min_exp, col_max_exp = "ExportMin_BAU_ktoe", "ExportMax_BAU_ktoe"
+    else:
+        col_min_exp, col_max_exp = "ExportMin_NCNC_ktoe", "ExportMax_NCNC_ktoe"
 
+    have_explicit = (col_min_exp in df_biofuels.columns) and (col_max_exp in df_biofuels.columns)
+    if have_explicit and (df_biofuels[[col_min_exp, col_max_exp]].notna().any().any()):
+        min_export = df_biofuels[col_min_exp].fillna(0)
+        max_export = df_biofuels[col_max_exp].fillna(0)
+    else:
+        dem = df_biofuels[demand_col].fillna(0)
+        min_export = (df_biofuels["MinProd_ktoe"].fillna(0) - dem).clip(lower=0)
+        max_export = (df_biofuels["MaxProd_ktoe"].fillna(0) - dem).clip(lower=0)
 
+    export_long = (
+        pd.DataFrame({
+            "Year": df_biofuels["Year"].astype(int),
+            "Min export potential [ktoe]": min_export,
+            "Max export potential [ktoe]": max_export,
+        })
+        .melt(id_vars=["Year"], var_name="Component", value_name="Value")
+    )
+
+    # Use go.Figure for grouped bars (your render_bar_chart defaults to relative)
+    import plotly.graph_objects as go
+    fig = go.Figure()
+    for comp, color in [
+        ("Min export potential [ktoe]", "#86efac"),
+        ("Max export potential [ktoe]", "#22c55e"),
+    ]:
+        sub = export_long[export_long["Component"] == comp]
+        fig.add_trace(go.Bar(x=sub["Year"], y=sub["Value"], name=comp, marker_color=color))
+
+    fig.update_layout(
+        title=f"Export potential ({scen_key})",
+        barmode="group",
+        xaxis_title="Year",
+        yaxis_title="ktoe",
+        height=getattr(theme, "CHART_HEIGHT", 500),
+        width=getattr(theme, "CHART_WIDTH", 800),
+        margin=dict(t=60, r=10, b=10, l=10),
+        legend_title_text="Series",
+    )
+    st.plotly_chart(fig, use_container_width=False)
