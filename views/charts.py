@@ -1,4 +1,4 @@
-# views/charts.py
+from __future__ import annotations # views/charts.py
 from typing import Dict, List, Optional, Union
 import streamlit as st
 import plotly.express as px
@@ -453,3 +453,112 @@ def render_biofuels_demand_and_potential(
         category_col="Component",
         title=title,
     )
+ # --- append near your other chart renderers ---
+
+
+import pandas as pd
+import plotly.express as px
+from config import theme
+
+def render_ships_stock(df_base: pd.DataFrame):
+    """
+    Stock Ships [number], stacked by ship type.
+    Expects columns: 'Year' + any that start with 'Stock_Ships_' (e.g., 'Stock_Ships_B').
+    """
+    if df_base.empty:
+        return px.bar(title="Stock Ships — no data")
+
+    stock_cols = [c for c in df_base.columns if c.startswith("Stock_Ships_")]
+    if "Year" not in df_base.columns or not stock_cols:
+        return px.bar(title="Stock Ships — expected 'Year' and 'Stock_Ships_*' columns")
+
+    d_long = (
+        df_base[["Year"] + stock_cols]
+        .melt(id_vars="Year", var_name="col", value_name="value")
+        .assign(type=lambda x: x["col"].str.replace("^Stock_Ships_", "", regex=True))
+    )
+
+    pref = ["C", "T", "B", "G", "O"]
+    seen = list(dict.fromkeys([t for t in pref if t in d_long["type"].unique()]))
+    rest = [t for t in sorted(d_long["type"].unique()) if t not in seen]
+    order = seen + rest
+    d_long["type"] = pd.Categorical(d_long["type"], categories=order, ordered=True)
+
+    fig = px.bar(
+        d_long.sort_values(["Year", "type"]),
+        x="Year", y="value", color="type",
+        title="Stock Ships [number]",
+        barmode="stack",
+    )
+    fig.update_layout(
+        width=getattr(theme, "CHART_WIDTH", 800),   # match agri_costs
+        height=getattr(theme, "CHART_HEIGHT", 500), # match agri_costs
+        margin=dict(l=10, r=10, t=60, b=10),
+        xaxis_title="Year",
+        yaxis_title="Number of Stock Ships",
+        legend_title=None,
+    )
+    fig.update_xaxes(ticks="outside", showline=True)
+    fig.update_yaxes(ticks="outside", showline=True, zeroline=True)
+    return fig
+
+
+def render_ships_new(df_base: pd.DataFrame):
+    """
+    New Ships [number], stacked by ship type.
+    Selects columns that start with 'New_Ships_' (case-insensitive).
+    Falls back to any 'new_' prefix if needed.
+    """
+    if df_base.empty:
+        return px.bar(title="New Ships — no data")
+
+    cols = [c for c in df_base.columns if c.lower().startswith("new_ships_")]
+    if not cols:
+        cols = [c for c in df_base.columns if c.lower().startswith("new_")]
+
+    if "Year" not in df_base.columns or not cols:
+        return px.bar(title="New Ships — expected 'Year' and 'New_Ships_*' columns")
+
+    d_long = (
+        df_base[["Year"] + cols]
+        .melt(id_vars="Year", var_name="col", value_name="value")
+    )
+
+    # Extract ship type from column suffix
+    def _extract_type(col: str) -> str:
+        cl = col.lower()
+        if cl.startswith("new_ships_"):
+            return col.split("_", 2)[-1]
+        if cl.startswith("new_"):
+            return col.split("_", 1)[-1]
+        return col
+
+    d_long["type"] = d_long["col"].map(_extract_type)
+
+    # Stable legend order if present
+    pref = ["C", "T", "B", "G", "O"]
+    seen = list(dict.fromkeys([t for t in pref if t in d_long["type"].unique()]))
+    rest = [t for t in sorted(d_long["type"].unique()) if t not in seen]
+    order = seen + rest
+    d_long["type"] = pd.Categorical(d_long["type"], categories=order, ordered=True)
+
+    fig = px.bar(
+        d_long.sort_values(["Year", "type"]),
+        x="Year",
+        y="value",
+        color="type",
+        title="New Ships [number]",
+        barmode="stack",
+    )
+    fig.update_layout(
+        width=getattr(theme, "CHART_WIDTH", 800),
+        height=getattr(theme, "CHART_HEIGHT", 500),
+        margin=dict(l=10, r=10, t=60, b=10),
+        xaxis_title="Year",
+        yaxis_title="Number of New Ships",
+        legend_title=None,
+    )
+    fig.update_xaxes(ticks="outside", showline=True)
+    fig.update_yaxes(ticks="outside", showline=True, zeroline=True)
+    return fig
+

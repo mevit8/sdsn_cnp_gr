@@ -13,7 +13,8 @@ TAB_TITLES = [
     "🛢️ Energy per Fuel",
     "♨️ Energy Fuel Emissions",
     "⚡ Energy Gen ↔ Cons",
-    "🌿 Biofuels"
+    "🌿 Biofuels",
+    "🚢 Ships",
 ]
 
 # Fuel charts palette (black, gold, brown)

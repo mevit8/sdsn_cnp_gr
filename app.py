@@ -2,10 +2,8 @@ import streamlit as st
 from config import theme
 import pandas as pd
 from models.data_loader import load_and_prepare_excel, prepare_stacked_data
-from views.charts import render_bar_chart, render_line_chart, render_grouped_bar_and_line
-from views.charts import render_sankey
+from views.charts import render_bar_chart, render_line_chart, render_grouped_bar_and_line, render_sankey, render_ships_stock, render_ships_new
 from PIL import Image
-import os
 from pathlib import Path
 import plotly.graph_objects as go
 
@@ -114,6 +112,13 @@ def load_biofuels_simple(path: str = "data/LEAP_Biofuels.xlsx", sheet: str = "Bi
 
     return df
 
+@st.cache_data(show_spinner=False)
+def load_maritime_base(path: str = "data/Maritime_results_all_scenarios.xlsx", sheet: str = "base") -> pd.DataFrame:
+    df = pd.read_excel(path, sheet_name=sheet)
+    for c in df.columns:
+        if c != "Year":
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+    return df
 
 # Load data
 df_costs = load_and_prepare_excel("data/Fable_46_Agricultural.xlsx")
@@ -124,6 +129,7 @@ df_energy_supply = load_and_prepare_excel("data/LEAP_Supply.xlsx")
 df_supply_emissions = load_and_prepare_excel("data/LEAP_Supply_Emissions.xlsx")
 df_energy_balance = load_energy_balance("data/LEAP_Energy_Balance.xlsx")
 df_biofuels = load_biofuels_simple("data/LEAP_Biofuels.xlsx")
+
 
 
 # Shared scenario selector
@@ -215,7 +221,7 @@ def build_sankey_from_balance(df: pd.DataFrame, scenario: str | None = None) -> 
 
 
 # Tabs
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(theme.TAB_TITLES)
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs(theme.TAB_TITLES)
 
 with tab1:
     cols = ["FertilizerCost", "LabourCost", "MachineryRunningCost", "DieselCost", "PesticideCost"]
@@ -454,3 +460,35 @@ with tab9:
         legend_title_text="Series",
     )
     st.plotly_chart(fig, use_container_width=False)
+    
+with tab10:
+    st.subheader("🚢 Ships")
+
+    try:
+        base_df = load_maritime_base()
+    except Exception as e:
+        st.warning(f"Could not load maritime data: {e}")
+    else:
+        scen = (selected_scenario or "").strip().upper()
+
+        # Special rule: BAU shows ONE number (KPI), not the 8 charts
+        if scen == "BAU":
+            stock_cols = [c for c in base_df.columns if c.startswith("Stock_Ships_")]
+            if "Year" in base_df.columns and stock_cols:
+                last_year = int(base_df["Year"].max())
+                total_last = float(base_df.loc[base_df["Year"] == last_year, stock_cols].sum(axis=1).iloc[0])
+                st.metric(label=f"Total Stock Ships ({last_year})", value=f"{int(round(total_last)):,}")
+                st.caption("BAU displays a single KPI as requested.")
+            else:
+                st.info("Maritime base sheet is missing 'Year' or 'Stock_Ships_*' columns.")
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                fig = render_ships_stock(base_df)
+                st.plotly_chart(fig, use_container_width=False)
+
+            with col2:
+                fig_new = render_ships_new(base_df)
+                st.plotly_chart(fig_new, use_container_width=False)
+
+
