@@ -89,6 +89,11 @@ def render_bar_chart(
     st.plotly_chart(fig, use_container_width=use_container_width) 
 
 '''
+from plotly import express as px
+from typing import Optional
+import streamlit as st
+from config import theme
+
 def render_bar_chart(
     df,
     x,
@@ -100,10 +105,12 @@ def render_bar_chart(
     tick_every_years: Optional[int] = None,
     start_year: Optional[int] = None,
     plot: bool = True,
+    width: Optional[int] = None,
+    height: Optional[int] = None,
 ):
     """
-    Renders a bar chart with optional tick_every_years to show only
-    every Nth year on categorical year axes (e.g., YearStr).
+    Renders a bar chart with optional tick_every_years.
+    By default, uses theme.CHART_WIDTH/HEIGHT and disables container_width.
     """
     fig = px.bar(
         df,
@@ -116,6 +123,7 @@ def render_bar_chart(
         color_discrete_sequence=None if isinstance(colors, dict) else colors,
     )
 
+    # Optional tick logic (if you still use it for years)
     if tick_every_years:
         years_int = []
         for v in x_category_order:
@@ -130,43 +138,49 @@ def render_bar_chart(
             if tickvals:
                 fig.update_xaxes(tickmode="array", tickvals=tickvals, ticktext=tickvals)
 
+    # Apply explicit size
+    fig.update_layout(
+        width=width or getattr(theme, "CHART_WIDTH", 800),
+        height=height or getattr(theme, "CHART_HEIGHT", 500),
+    )
+
     if plot:
-        import streamlit as st
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=False)  # key change: disable full width
 
     return fig
 
+
 def render_line_chart(
     df,
-    x: str,
-    y: str,
-    color_col: str,
-    title: str,
-    colors: ColorSpec = None,
-    height: int = 400,
-    use_container_width: bool = True,
+    x,
+    y,
+    color,
+    title,
+    tick_every_years: Optional[int] = None,
+    start_year: Optional[int] = None,
+    plot: bool = True,
+    width: Optional[int] = None,
+    height: Optional[int] = None,
 ):
-    """
-    Line chart with optional discrete color mapping. Signature matches app.py.
-    """
-    if color_col not in df.columns:
-        raise KeyError(f"Column '{color_col}' not in DataFrame: {list(df.columns)}")
+    fig = px.line(df, x=x, y=y, color=color, title=title)
 
-    color_discrete_map, color_discrete_sequence = _build_px_colors(df, color_col, colors)
+    if tick_every_years and x.lower() == "year":
+        try:
+            y0 = int(df[x].min()) if start_year is None else int(start_year)
+            y0 -= y0 % tick_every_years
+            fig.update_xaxes(tick0=y0, dtick=tick_every_years)
+        except Exception:
+            pass
 
-    fig = px.line(
-        df,
-        x=x,
-        y=y,
-        color=color_col,
-        markers=True,
-        title=title,
-        color_discrete_map=color_discrete_map,
-        color_discrete_sequence=color_discrete_sequence,
-        height=height,
+    fig.update_layout(
+        width=width or getattr(theme, "CHART_WIDTH", 800),
+        height=height or getattr(theme, "CHART_HEIGHT", 500),
     )
-    fig.update_layout(legend_title_text=color_col, margin=dict(t=60, r=10, b=10, l=10))
-    st.plotly_chart(fig, use_container_width=use_container_width)
+
+    if plot:
+        st.plotly_chart(fig, use_container_width=False)
+
+    return fig
 
 
 def render_grouped_bar_and_line(

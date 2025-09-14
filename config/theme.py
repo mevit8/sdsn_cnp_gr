@@ -40,3 +40,6 @@ def normalize(label: str) -> str:
     key = " ".join(str(label).split())
     low = key.casefold()
     return ALIASES.get(low, key)  # return canonical display text if alias found
+
+CHART_WIDTH = 800  # default width for all charts
+# CHART_HEIGHT = 500  # optional
