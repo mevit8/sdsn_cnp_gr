@@ -12,7 +12,8 @@ TAB_TITLES = [
     "🌐 Energy Consumption Emissions",
     "🛢️ Energy per Fuel",
     "♨️ Energy Fuel Emissions",
-    # "🌿⛽ Biofuels"  # ← new/updated
+    "⚡ Energy Gen ↔ Cons"
+    # "🌿⛽ Biofuels"  # 
 ]
 
 # Fuel charts palette (black, gold, brown)

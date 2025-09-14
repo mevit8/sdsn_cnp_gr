@@ -237,3 +237,147 @@ def render_grouped_bar_and_line(
         legend_title_text=category_col,
     )
     st.plotly_chart(fig, use_container_width=use_container_width)
+# views/charts.py
+from typing import Optional, List
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
+from config import theme
+
+# views/charts.py
+from typing import Optional, List
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
+from config import theme
+
+# views/charts.py
+from typing import Optional, List, Dict
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
+from config import theme
+
+def _wrap_text(s: str, max_len: int = 14) -> str:
+    """
+    Insert <br> into long labels so they wrap nicely in Sankey.
+    Tries to break at spaces closest to multiples of max_len.
+    """
+    if not isinstance(s, str) or len(s) <= max_len:
+        return s
+    parts, line, count = [], [], 0
+    for word in s.split():
+        if count + len(word) + (1 if line else 0) > max_len:
+            parts.append(" ".join(line))
+            line, count = [word], len(word)
+        else:
+            line.append(word)
+            count += len(word) + (1 if line[:-1] else 0)
+    if line:
+        parts.append(" ".join(line))
+    return "<br>".join(parts)
+
+def _wrap_text(s: str, max_len: int = 14) -> str:
+    if not isinstance(s, str) or len(s) <= max_len:
+        return s
+    parts, line, count = [], [], 0
+    for word in s.split():
+        new_len = count + len(word) + (1 if line else 0)
+        if new_len > max_len:
+            parts.append(" ".join(line)); line, count = [word], len(word)
+        else:
+            line.append(word); count = new_len
+    if line: parts.append(" ".join(line))
+    return "<br>".join(parts)
+
+def _hex_to_rgba(hex_color: str, alpha: float) -> str:
+    hex_color = hex_color.strip().lstrip("#")
+    if len(hex_color) == 3:
+        hex_color = "".join(c*2 for c in hex_color)
+    r = int(hex_color[0:2], 16); g = int(hex_color[2:4], 16); b = int(hex_color[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
+
+def render_sankey(
+    links_df: pd.DataFrame,
+    title: str,
+    node_order: Optional[List[str]] = None,
+    width: Optional[int] = None,
+    height: Optional[int] = None,
+    plot: bool = True,
+    full_width: bool = False,
+    label_wrap: int = 14,
+    label_map: Optional[Dict[str, str]] = None,
+    font_size: int = 15,
+    node_thickness: int = 26,
+    node_pad: int = 24,
+    node_colors: Optional[Dict[str, str]] = None,   # e.g. {"Electricity":"#1f77b4", ...}
+    link_alpha: float = 0.35,
+):
+    # Validate
+    needed = {"source", "target", "value"}
+    if not needed.issubset(links_df.columns):
+        raise ValueError(f"Sankey links_df missing columns: {needed - set(links_df.columns)}")
+
+    # Node order
+    if node_order:
+        nodes = node_order
+    else:
+        nodes = []
+        for n in links_df["source"].tolist() + links_df["target"].tolist():
+            if n not in nodes:
+                nodes.append(n)
+    idx = {n: i for i, n in enumerate(nodes)}
+
+    # Labels (built-in; wrap for readability)
+    raw_labels = [label_map.get(n, n) if label_map else n for n in nodes]
+    wrapped_labels = [_wrap_text(s, max_len=label_wrap) for s in raw_labels]
+
+    # Node colors (opaque)
+    default_node_color = "#e5e7eb"
+    node_color_list = [(node_colors.get(n) if node_colors else default_node_color) or default_node_color for n in nodes]
+
+    # Link colors from SOURCE node color with alpha
+    link_colors = []
+    for s in links_df["source"].map(idx).tolist():
+        c = node_color_list[s]
+        link_colors.append(_hex_to_rgba(c, link_alpha))
+
+    sankey = go.Sankey(
+        arrangement="snap",
+        node=dict(
+            label=wrapped_labels,     # 👈 use built-in labels (aligned with nodes)
+            pad=node_pad,
+            thickness=node_thickness,
+            line=dict(width=0.6, color="rgba(0,0,0,0.25)"),
+            color=node_color_list,
+        ),
+        link=dict(
+            source=links_df["source"].map(idx).tolist(),
+            target=links_df["target"].map(idx).tolist(),
+            value=links_df["value"].astype(float).tolist(),
+            color=link_colors,
+        ),
+        valueformat=".3s",
+        textfont=dict(size=font_size, color="#111", family="Arial, Helvetica, sans-serif"),
+    )
+
+    fig = go.Figure(data=[sankey])
+
+    # Layout (respect full_width & height)
+    layout_kwargs = dict(
+        title=title,
+        height=height or getattr(theme, "CHART_HEIGHT", 500),
+        margin=dict(l=10, r=10, t=40, b=10),
+        font=dict(family="Arial, Helvetica, sans-serif", color="#111"),
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+    )
+    if not full_width:
+        layout_kwargs["width"] = width or getattr(theme, "CHART_WIDTH", 800)
+    fig.update_layout(**layout_kwargs)
+
+    if plot:
+        st.plotly_chart(fig, use_container_width=full_width)
+    return fig
+
+
