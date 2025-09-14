@@ -4,7 +4,9 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 from config import theme
-from typing import Optional
+from typing import Optional, List, Literal
+import pandas as pd
+from pathlib import Path
 
 ColorSpec = Union[Dict[str, str], List[str], None]
 
@@ -44,55 +46,6 @@ def _build_px_colors(df, color_col: str, colors: ColorSpec):
         color_discrete_sequence = colors
 
     return color_discrete_map, color_discrete_sequence
-
-'''
-def render_bar_chart(
-    df,
-    x: str,
-    y: str,
-    color_col: str,
-    title: str,
-    x_order: Optional[List[str]] = None,
-    colors: ColorSpec = None,          # dict[str,str] or list[str]
-    barmode: str = "relative",
-    height: int = 400,
-    use_container_width: bool = True,
-):
-    """
-    Generic bar chart with optional discrete color mapping and x-axis ordering.
-    Matches calls in app.py, e.g.:
-      render_bar_chart(melted, "YearStr", "Value", "Component", "...", [str(y) for y in years])
-      render_bar_chart(..., colors=theme.FUEL_COLORS)
-    """
-    if color_col not in df.columns:
-        raise KeyError(f"Column '{color_col}' not in DataFrame: {list(df.columns)}")
-
-    color_discrete_map, color_discrete_sequence = _build_px_colors(df, color_col, colors)
-
-    fig = px.bar(
-        df,
-        x=x,
-        y=y,
-        color=color_col,
-        title=title,
-        category_orders=({x: x_order} if x_order else None),
-        color_discrete_map=color_discrete_map,
-        color_discrete_sequence=color_discrete_sequence,
-        height=height,
-    )
-    # stacking/grouping
-    fig.update_layout(barmode=barmode, legend_title_text=color_col, margin=dict(t=60, r=10, b=10, l=10))
-    # force categorical axis if you pass an explicit x_order
-    if x_order:
-        fig.update_xaxes(type="category", categoryorder="array", categoryarray=x_order)
-
-    st.plotly_chart(fig, use_container_width=use_container_width) 
-
-'''
-from plotly import express as px
-from typing import Optional
-import streamlit as st
-from config import theme
 
 def render_bar_chart(
     df,
@@ -237,26 +190,6 @@ def render_grouped_bar_and_line(
         legend_title_text=category_col,
     )
     st.plotly_chart(fig, use_container_width=use_container_width)
-# views/charts.py
-from typing import Optional, List
-import pandas as pd
-import plotly.graph_objects as go
-import streamlit as st
-from config import theme
-
-# views/charts.py
-from typing import Optional, List
-import pandas as pd
-import plotly.graph_objects as go
-import streamlit as st
-from config import theme
-
-# views/charts.py
-from typing import Optional, List, Dict
-import pandas as pd
-import plotly.graph_objects as go
-import streamlit as st
-from config import theme
 
 def _wrap_text(s: str, max_len: int = 14) -> str:
     """
@@ -380,4 +313,143 @@ def render_sankey(
         st.plotly_chart(fig, use_container_width=full_width)
     return fig
 
+def biofuels_demand_potential_chart(
+    scenario: Literal["BAU","NCNC"] = "BAU",
+    path: str | Path = "data/LEAP_Biofuels.xlsx"
+):
+    """
+    Build 'Biofuels demand and potential supply [ktoe]'
+    from LEAP_Biofuels.xlsx (sheet: LEAPs output).
 
+    scenario:
+      - "BAU"  -> Baseline demand series
+      - "NCNC" -> NECP demand series
+    """
+    df = pd.read_excel(path, sheet_name="LEAPs output")
+
+    # Locate header row with "Fuel"
+    hdr_idx = df.index[df.iloc[:,0].astype(str).str.strip().eq("Fuel")][0]
+    header = df.loc[hdr_idx]
+
+    # Collect year columns (Baseline block)
+    baseline_cols = []
+    for c in df.columns[2:]:
+        val = header[c]
+        if pd.api.types.is_number(val):
+            baseline_cols.append(c)
+        elif isinstance(val,str) and val.strip().lower()=="total":
+            break
+    years = [int(header[c]) for c in baseline_cols]
+
+    # Collect year cols for NECP (second block, after first 'Total')
+    start_necp = df.columns.get_loc(baseline_cols[-1]) + 2
+    necp_cols = []
+    for c in df.columns[start_necp:]:
+        val = header[c]
+        if pd.api.types.is_number(val):
+            necp_cols.append(c)
+        elif isinstance(val,str) and val.strip().lower()=="total":
+            break
+
+    # Demand row
+    demand_row = df[df.iloc[:,0].astype(str).str.strip().eq("Total Biomass required")].iloc[0]
+    demand_baseline = [float(demand_row[c]) for c in baseline_cols]
+    demand_necp     = [float(demand_row[c]) for c in necp_cols]
+
+    # MIN/MAX rows
+    min_row = df[df.iloc[:,1].astype(str).str.strip().eq("MIN")].iloc[0]
+    max_row = df[df.iloc[:,1].astype(str).str.strip().eq("MAX")].iloc[0]
+    min_prod = [float(min_row[c]) for c in baseline_cols]
+    max_prod = [float(max_row[c]) for c in baseline_cols]
+
+    # Pick demand by scenario
+    scenario = (scenario or "BAU").upper()
+    demand = demand_baseline if scenario=="BAU" else demand_necp
+    demand_label = "Baseline" if scenario=="BAU" else "NECP"
+
+    # Build figure
+    fig = go.Figure()
+    fig.add_bar(x=years,y=min_prod,name="Minimum Production Potential [ktoe]")
+    fig.add_bar(x=years,y=max_prod,name="Maximum Production Potential [ktoe]")
+    fig.add_scatter(x=years,y=demand,mode="lines+markers",
+                    name=f"Biofuel Demand {demand_label} [ktoe]")
+
+    fig.update_layout(
+        title="Biofuels demand and potential supply [ktoe]",
+        barmode="group",
+        xaxis_title="Year",
+        yaxis_title="ktoe",
+        legend_title="Series",
+        margin=dict(l=10,r=10,t=40,b=10)
+    )
+    return fig
+def render_biofuels_demand_and_potential(
+    df_biofuels: pd.DataFrame,
+    scenario: Literal["BAU","NCNC"] = "BAU",
+    title: str = "Biofuels demand and potential supply [ktoe]"
+):
+    """
+    Renders Chart 1 using the already-loaded LEAP_Biofuels.xlsx dataframe.
+    Expects a wide table: first column = row label, other columns = years.
+    """
+    if df_biofuels.empty:
+        st.info("No data found in LEAP_Biofuels.xlsx.")
+        return
+
+    # Ensure first column is 'Metric'
+    first_col = df_biofuels.columns[0]
+    if first_col != "Metric":
+        df_biofuels = df_biofuels.rename(columns={first_col: "Metric"})
+
+    # Make sure year columns are strings we can convert to int later
+    # (load_and_prepare_excel typically keeps them as numeric/strings; be permissive)
+    year_cols = [c for c in df_biofuels.columns if c != "Metric"]
+
+    # Row labels we need
+    BAR_ROWS = [
+        "Minimum Production Potential [ktoe]",
+        "Maximum Production Potential [ktoe]",
+    ]
+    LINE_ROWS = {
+        "BAU":  "Biofuel Demand Baseline scenario [ktoe]",
+        "NCNC": "Biofuel Demand NECP [ktoe]",
+    }
+    line_row = LINE_ROWS.get((scenario or "BAU").upper(), LINE_ROWS["BAU"])
+
+    # Bars (Min/Max)
+    bar_src = df_biofuels[df_biofuels["Metric"].isin(BAR_ROWS)].copy()
+    bar_long = bar_src.melt(id_vars="Metric", value_vars=year_cols,
+                            var_name="Year", value_name="Value")
+    # Lines (selected scenario only)
+    line_src = df_biofuels[df_biofuels["Metric"] == line_row].copy()
+    line_long = line_src.melt(id_vars="Metric", value_vars=year_cols,
+                              var_name="Year", value_name="Value")
+
+    # Clean types
+    # Coerce year to int when possible
+    def _to_int_safe(x):
+        try:
+            return int(float(x))
+        except Exception:
+            return x
+    bar_long["Year"] = bar_long["Year"].map(_to_int_safe)
+    line_long["Year"] = line_long["Year"].map(_to_int_safe)
+
+    # Rename for the generic renderer
+    bar_long = bar_long.rename(columns={"Metric": "Component"})
+    line_long = line_long.rename(columns={"Metric": "Component"})
+
+    # Sort x if they are numeric years
+    if pd.api.types.is_numeric_dtype(pd.Series([y for y in bar_long["Year"] if isinstance(y, (int, float))])):
+        bar_long = bar_long.sort_values("Year")
+        line_long = line_long.sort_values("Year")
+
+    # Use your shared renderer (grouped bars + single line)
+    render_grouped_bar_and_line(
+        prod_df=bar_long,
+        demand_df=line_long,
+        x_col="Year",
+        y_col="Value",
+        category_col="Component",
+        title=title,
+    )

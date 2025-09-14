@@ -15,11 +15,8 @@ import pandas as pd
 @st.cache_data(show_spinner=False)
 def load_energy_balance(path: str = "data/LEAP_Energy_Balance.xlsx") -> pd.DataFrame:
     df = pd.read_excel(path, sheet_name="Sheet1")
-    first_col = df.columns[0]
-    df = df.rename(columns={first_col: "Scenario"})  
-    if df.columns[1] != "Flow":
-        df = df.rename(columns={df.columns[1]: "Flow"})
-    # Ensure numeric NaNs are 0
+    c0, c1 = df.columns[:2]
+    df = df.rename(columns={c0: "Scenario", c1: "Flow"})
     for col in df.columns:
         if col not in ("Scenario", "Flow"):
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
@@ -94,6 +91,32 @@ if LOGO_PATH.exists():
 else:
     st.sidebar.info(f"Logo not found at: {LOGO_PATH}")
 
+@st.cache_data(show_spinner=False)
+def load_biofuels_leaps_output(path: str = "data/LEAP_Biofuels.xlsx"):
+    import pandas as pd
+
+    # Row 37 has the years (left block + right block duplicates)
+    df = pd.read_excel(path, sheet_name="LEAPs output", header=37)
+
+    # Column 1 holds the row labels we need
+    metric_col = df.columns[1]
+    df = df.rename(columns={metric_col: "Metric"})
+
+    # Identify year columns: ints = left block; floats with .1 = right block
+    num_cols = [c for c in df.columns if isinstance(c, (int, float))]
+    left_years = sorted([int(c) for c in num_cols if float(c).is_integer()])
+    right_years = sorted([c for c in num_cols if not float(c).is_integer()])  # e.g., 2022.1
+
+    # Keep only the useful columns
+    keep_cols = ["Metric"] + left_years + right_years
+    df = df.loc[:, keep_cols].copy()
+
+    # Coerce numeric values and fill NaNs
+    for c in left_years + right_years:
+        df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0.0)
+
+    return df, left_years, right_years
+
 
 # Load data
 df_costs = load_and_prepare_excel("data/Fable_46_Agricultural.xlsx")
@@ -103,7 +126,9 @@ df_energy = load_and_prepare_excel("data/LEAP_Demand_Cons.xlsx")
 df_energy_supply = load_and_prepare_excel("data/LEAP_Supply.xlsx")
 df_supply_emissions = load_and_prepare_excel("data/LEAP_Supply_Emissions.xlsx")
 df_energy_balance = load_energy_balance("data/LEAP_Energy_Balance.xlsx")
-df_biofuels = load_and_prepare_excel("data/LEAP_Biofuels_Demand.xlsx", year_col="Year")
+df_biofuels_out, bio_left_years, bio_export_years = load_biofuels_leaps_output("data/LEAP_Biofuels.xlsx")
+
+
 
 # Shared scenario selector
 scenarios = sorted(set(df_costs["Scenario"]).intersection(
@@ -195,7 +220,7 @@ def build_sankey_from_balance(df: pd.DataFrame, scenario: str | None = None) -> 
 
 
 # Tabs
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(theme.TAB_TITLES)
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(theme.TAB_TITLES)
 
 with tab1:
     cols = ["FertilizerCost", "LabourCost", "MachineryRunningCost", "DieselCost", "PesticideCost"]
@@ -345,6 +370,45 @@ with tab8:
             )
     except Exception as e:
         st.error(f"Failed to build Sankey: {e}")
+
+with tab9:
+    st.subheader("🌿 Biofuels – Demand vs Potential Supply")
+
+    # Exact labels from the sheet (column 'Metric')
+    BAR_ROWS = [
+        "Minimum Production Potential [ktoe]",
+        "Maximum Production Potential [ktoe]",
+    ]
+    LINE_ROWS = {
+        "BAU":  "Biofuel Demand Baseline scenario [ktoe]",
+        "NCNC": "Biofuel Demand NECP [ktoe]",
+    }
+    demand_row_name = LINE_ROWS.get(selected_scenario, "Biofuel Demand Baseline scenario [ktoe]")
+
+    # ---- Bars (min/max production potential) from left-year block ----
+    bar_src = df_biofuels_out[df_biofuels_out["Metric"].isin(BAR_ROWS)].copy()
+    bar_long = bar_src.melt(id_vars=["Metric"], value_vars=bio_left_years,
+                            var_name="Year", value_name="Value")
+    bar_long["Year"] = bar_long["Year"].astype(int)
+    bar_long = bar_long.rename(columns={"Metric": "Component"})
+
+    # ---- Line (demand for selected scenario) from left-year block ----
+    line_src = df_biofuels_out[df_biofuels_out["Metric"] == demand_row_name].copy()
+    line_long = line_src.melt(id_vars=["Metric"], value_vars=bio_left_years,
+                              var_name="Year", value_name="Value")
+    line_long["Year"] = line_long["Year"].astype(int)
+    line_long = line_long.rename(columns={"Metric": "Component"})
+
+    st.markdown("**a) Biofuels demand and potential supply [ktoe]**")
+    render_grouped_bar_and_line(
+        prod_df=bar_long,
+        demand_df=line_long,
+        x_col="Year",
+        y_col="Value",
+        category_col="Component",
+        title=f"Biofuels demand vs potential supply ({selected_scenario})",
+    )
+
 
 
 
