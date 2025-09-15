@@ -144,21 +144,21 @@ def render_grouped_bar_and_line(
     category_col: str,
     title: str,
     colors: ColorSpec = None,
-    height: int = 450,
-    use_container_width: bool = True,
+    width: Optional[int] = None,
+    height: Optional[int] = None,
+    plot: bool = True,
 ):
     """
     Mixed graph-objects figure: grouped bars (production) + lines (demand).
     Uses the same color mapping rules so categories stay consistent.
     """
-    # Build a simple lookup function for colors
     def _color_for(lbl: str) -> Optional[str]:
         if isinstance(colors, dict):
             if lbl in colors:
                 return colors[lbl]
             norm = _normalize(lbl)
             return colors.get(norm)
-        return None  # GO will use default if None
+        return None
 
     fig = go.Figure()
 
@@ -185,11 +185,17 @@ def render_grouped_bar_and_line(
         title=title,
         xaxis_title=x_col,
         yaxis_title=y_col,
-        height=height,
         margin=dict(t=60, r=10, b=10, l=10),
         legend_title_text=category_col,
+        width=width or getattr(theme, "CHART_WIDTH", 800),
+        height=height or getattr(theme, "CHART_HEIGHT", 500),
     )
-    st.plotly_chart(fig, use_container_width=use_container_width)
+
+    if plot:
+        st.plotly_chart(fig, use_container_width=False)
+
+    return fig
+
 
 def _wrap_text(s: str, max_len: int = 14) -> str:
     """

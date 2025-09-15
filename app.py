@@ -512,39 +512,45 @@ SANKEY_LABEL_MAP = {
 }
 
 with tab8:
-    SANKEY_NODE_COLORS = {
-    # fuels/carriers
-    "Electricity": "#2563eb",
-    "Natural Gas": "#0ea5e9",
-    "Heat": "#ea580c",
-    "Crude Oil": "#f59e0b",
-    "Biomass": "#16a34a",
-    "Solar": "#fbbf24",
-    "Hydrogen": "#a855f7",
-    "Ethanol": "#22c55e",
-    "Synthetic Fuels": "#06b6d4",
-    # converters
-    "Electricity Generation": "#93c5fd",
-    "Heat Generation": "#fdba74",
-    "Oil Refining": "#fcd34d",
-    "Synthetic Fuels Module": "#99f6e4",
-    "Transmission and Distribution": "#cbd5e1",
-    # sinks
-    "Residential": "#111827",
-    "Industry": "#374151",
-    "Agriculture": "#4b5563",
-    "Service Tertiary Sector": "#6b7280",
-    "Passenger Transportation": "#9ca3af",
-    "Freight Transportation": "#9ca3af",
-    "Maritime": "#9ca3af",
-    "Energy Product Industry": "#6b7280",
-    "Hydrogen Generation": "#a78bfa",
-    "Losses": "#d1d5db",
-    "Exports": "#d1d5db",
-    "Waste": "#d1d5db",
-}
+    explainer_path = BASE_DIR / "content" / "energy_balance_explainer.md"
+    if explainer_path.exists():
+        st.markdown(explainer_path.read_text(encoding="utf-8"))
+    else:
+        st.warning(f"Explanation file not found at {explainer_path}")
 
-    st.subheader("⚡ Energy Generation ↔ Consumption (Balance)")
+    SANKEY_NODE_COLORS = {
+        # fuels/carriers
+        "Electricity": "#2563eb",
+        "Natural Gas": "#0ea5e9",
+        "Heat": "#ea580c",
+        "Crude Oil": "#f59e0b",
+        "Biomass": "#16a34a",
+        "Solar": "#fbbf24",
+        "Hydrogen": "#a855f7",
+        "Ethanol": "#22c55e",
+        "Synthetic Fuels": "#06b6d4",
+        # converters
+        "Electricity Generation": "#93c5fd",
+        "Heat Generation": "#fdba74",
+        "Oil Refining": "#fcd34d",
+        "Synthetic Fuels Module": "#99f6e4",
+        "Transmission and Distribution": "#cbd5e1",
+        # sinks
+        "Residential": "#111827",
+        "Industry": "#374151",
+        "Agriculture": "#4b5563",
+        "Service Tertiary Sector": "#6b7280",
+        "Passenger Transportation": "#9ca3af",
+        "Freight Transportation": "#9ca3af",
+        "Maritime": "#9ca3af",
+        "Energy Product Industry": "#6b7280",
+        "Hydrogen Generation": "#a78bfa",
+        "Losses": "#d1d5db",
+        "Exports": "#d1d5db",
+        "Waste": "#d1d5db",
+    }
+
+    # st.subheader("⚡ Energy Generation ↔ Consumption (Balance)")
     try:
         links_df, node_order = build_sankey_from_balance(df_energy_balance, scenario=selected_scenario)
         if links_df.empty:
@@ -557,102 +563,117 @@ with tab8:
                 full_width=True,
                 height=720,
                 label_wrap=14,
-                node_colors=SANKEY_NODE_COLORS,  # optional
+                node_colors=SANKEY_NODE_COLORS,
             )
     except Exception as e:
         st.error(f"Failed to build Sankey: {e}")
+
 with tab9:
-    st.subheader("🌿 Biofuels")
+    explainer_path = BASE_DIR / "content" / "biofuels_explainer.md"
+    if explainer_path.exists():
+        st.markdown(explainer_path.read_text(encoding="utf-8"))
+    else:
+        st.warning(f"Explanation file not found at {explainer_path}")
 
     scen = (selected_scenario or "").strip().upper()
     scen_key = "BAU" if scen == "BAU" else "NCNC"  # default to NCNC for anything else
 
     # -----------------------------
+    # Side-by-side layout for biofuels charts
+    # -----------------------------
+    col1, col2 = st.columns(2)
+
     # a) Demand vs Potential Supply
-    # -----------------------------
-    st.markdown("**a) Biofuels demand and potential supply [ktoe]**")
+    with col1:
+        st.markdown("**Biofuels demand and potential supply [ktoe]**")
 
-    # Bars: Min/Max production potential
-    bar_long = (
-        df_biofuels
-        .melt(id_vars=["Year"], value_vars=["MinProd_ktoe", "MaxProd_ktoe"],
-              var_name="Component", value_name="Value")
-        .replace({"Component": {
-            "MinProd_ktoe": "Minimum Production Potential [ktoe]",
-            "MaxProd_ktoe": "Maximum Production Potential [ktoe]",
-        }})
-    )
+        # Bars: Min/Max production potential
+        bar_long = (
+            df_biofuels
+            .melt(id_vars=["Year"], value_vars=["MinProd_ktoe", "MaxProd_ktoe"],
+                  var_name="Component", value_name="Value")
+            .replace({"Component": {
+                "MinProd_ktoe": "Minimum Production Potential [ktoe]",
+                "MaxProd_ktoe": "Maximum Production Potential [ktoe]",
+            }})
+        )
 
-    # Line: chosen demand series
-    demand_col = "Demand_BAU_ktoe" if scen_key == "BAU" else "Demand_NCNC_ktoe"
-    line_long = (
-        df_biofuels[["Year", demand_col]]
-        .rename(columns={demand_col: "Value"})
-        .assign(Component=f"Demand ({'Baseline' if scen_key=='BAU' else 'NECP'}) [ktoe]")
-    )
+        # Line: chosen demand series
+        demand_col = "Demand_BAU_ktoe" if scen_key == "BAU" else "Demand_NCNC_ktoe"
+        line_long = (
+            df_biofuels[["Year", demand_col]]
+            .rename(columns={demand_col: "Value"})
+            .assign(Component=f"Demand ({'Baseline' if scen_key=='BAU' else 'NECP'}) [ktoe]")
+        )
 
-    render_grouped_bar_and_line(
-        prod_df=bar_long,
-        demand_df=line_long,
-        x_col="Year",
-        y_col="Value",
-        category_col="Component",
-        title=f"Biofuels demand vs potential supply ({scen_key})",
-    )
+        render_grouped_bar_and_line(
+            prod_df=bar_long,
+            demand_df=line_long,
+            x_col="Year",
+            y_col="Value",
+            category_col="Component",
+            title=f"Biofuels demand vs potential supply ({scen_key})",
+            height=theme.CHART_HEIGHT,
+        )
 
-    # -----------------------------
     # b) Potential for Biofuels Export
-    # -----------------------------
-    st.markdown("**b) Potential for Biofuels Export [ktoe]**")
+    with col2:
+        st.markdown("**Potential for Biofuels Export [ktoe]**")
 
-    # Prefer explicit export cols; otherwise compute from potential − demand
-    if scen_key == "BAU":
-        col_min_exp, col_max_exp = "ExportMin_BAU_ktoe", "ExportMax_BAU_ktoe"
-    else:
-        col_min_exp, col_max_exp = "ExportMin_NCNC_ktoe", "ExportMax_NCNC_ktoe"
+        # Prefer explicit export cols; otherwise compute from potential − demand
+        if scen_key == "BAU":
+            col_min_exp, col_max_exp = "ExportMin_BAU_ktoe", "ExportMax_BAU_ktoe"
+        else:
+            col_min_exp, col_max_exp = "ExportMin_NCNC_ktoe", "ExportMax_NCNC_ktoe"
 
-    have_explicit = (col_min_exp in df_biofuels.columns) and (col_max_exp in df_biofuels.columns)
-    if have_explicit and (df_biofuels[[col_min_exp, col_max_exp]].notna().any().any()):
-        min_export = df_biofuels[col_min_exp].fillna(0)
-        max_export = df_biofuels[col_max_exp].fillna(0)
-    else:
-        dem = df_biofuels[demand_col].fillna(0)
-        min_export = (df_biofuels["MinProd_ktoe"].fillna(0) - dem).clip(lower=0)
-        max_export = (df_biofuels["MaxProd_ktoe"].fillna(0) - dem).clip(lower=0)
+        have_explicit = (col_min_exp in df_biofuels.columns) and (col_max_exp in df_biofuels.columns)
+        if have_explicit and (df_biofuels[[col_min_exp, col_max_exp]].notna().any().any()):
+            min_export = df_biofuels[col_min_exp].fillna(0)
+            max_export = df_biofuels[col_max_exp].fillna(0)
+        else:
+            dem = df_biofuels[demand_col].fillna(0)
+            min_export = (df_biofuels["MinProd_ktoe"].fillna(0) - dem).clip(lower=0)
+            max_export = (df_biofuels["MaxProd_ktoe"].fillna(0) - dem).clip(lower=0)
 
-    export_long = (
-        pd.DataFrame({
-            "Year": df_biofuels["Year"].astype(int),
-            "Min export potential [ktoe]": min_export,
-            "Max export potential [ktoe]": max_export,
-        })
-        .melt(id_vars=["Year"], var_name="Component", value_name="Value")
-    )
+        export_long = (
+            pd.DataFrame({
+                "Year": df_biofuels["Year"].astype(int),
+                "Min export potential [ktoe]": min_export,
+                "Max export potential [ktoe]": max_export,
+            })
+            .melt(id_vars=["Year"], var_name="Component", value_name="Value")
+        )
 
-    # Use go.Figure for grouped bars (your render_bar_chart defaults to relative)
-    import plotly.graph_objects as go
-    fig = go.Figure()
-    for comp, color in [
-        ("Min export potential [ktoe]", "#86efac"),
-        ("Max export potential [ktoe]", "#22c55e"),
-    ]:
-        sub = export_long[export_long["Component"] == comp]
-        fig.add_trace(go.Bar(x=sub["Year"], y=sub["Value"], name=comp, marker_color=color))
+        import plotly.graph_objects as go
+        fig = go.Figure()
+        for comp, color in [
+            ("Min export potential [ktoe]", "#86efac"),
+            ("Max export potential [ktoe]", "#22c55e"),
+        ]:
+            sub = export_long[export_long["Component"] == comp]
+            fig.add_trace(go.Bar(x=sub["Year"], y=sub["Value"], name=comp, marker_color=color))
 
-    fig.update_layout(
-        title=f"Export potential ({scen_key})",
-        barmode="group",
-        xaxis_title="Year",
-        yaxis_title="ktoe",
-        height=getattr(theme, "CHART_HEIGHT", 500),
-        width=getattr(theme, "CHART_WIDTH", 800),
-        margin=dict(t=60, r=10, b=10, l=10),
-        legend_title_text="Series",
-    )
-    st.plotly_chart(fig, use_container_width=False)
-    
+        fig.update_layout(
+            title=f"Export potential ({scen_key})",
+            barmode="group",
+            xaxis_title="Year",
+            yaxis_title="ktoe",
+            width=theme.CHART_WIDTH,
+            height=theme.CHART_HEIGHT,
+            margin=dict(t=60, r=10, b=10, l=10),
+            legend_title_text="Series",
+        )
+        st.plotly_chart(fig, use_container_width=False)
+
+
 with tab10:
-    st.subheader("🚢 Ships")
+    explainer_path = BASE_DIR / "content" / "ships_explainer.md"
+    if explainer_path.exists():
+        st.markdown(explainer_path.read_text(encoding="utf-8"))
+    else:
+        st.warning(f"Explanation file not found at {explainer_path}")
+
+    # st.subheader("🚢 Ships")
 
     try:
         base_df = load_maritime_base()
@@ -705,7 +726,13 @@ with tab10:
                 st.plotly_chart(fig_penalty, use_container_width=False)
 
 with tab11:
-    st.subheader("💧 Water Requirements")
+    explainer_path = BASE_DIR / "content" / "water_explainer.md"
+    if explainer_path.exists():
+        st.markdown(explainer_path.read_text(encoding="utf-8"))
+    else:
+        st.warning(f"Explanation file not found at {explainer_path}")
+
+    # st.subheader("💧 Water Requirements")
 
     try:
         water = load_water_requirements()

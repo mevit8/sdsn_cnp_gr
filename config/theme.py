@@ -41,4 +41,4 @@ def normalize(label: str) -> str:
     return ALIASES.get(low, key)  # return canonical display text if alias found
 
 CHART_WIDTH = 800  # default width for all charts
-# CHART_HEIGHT = 500  # optional
+CHART_HEIGHT = 500  # optional

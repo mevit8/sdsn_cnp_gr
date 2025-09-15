@@ -1,8 +1,8 @@
-The simulation considers two scenarios: 
+## The Simulation considers two scenarios: 
 
-the do-nothing scenario (business-as-usual - BAU) which assumes that the current trends will continue applying until 2050; 
+the ** do-nothing scenario (business-as-usual - BAU) ** which assumes that the current trends will continue applying until 2050; 
 
-the NCNC (National Climate Neutrality Commitments) scenario which assumes that the main sector climate-neutrality policies are jointly implemented. [e.g. cleaner fuels & increased energy efficiency]
+the ** NCNC (National Climate Neutrality Commitments) scenario ** which assumes that the main sector climate-neutrality policies are jointly implemented. [e.g. cleaner fuels & increased energy efficiency]
 
 The main policy instrument was simulated for each sector. 
 
