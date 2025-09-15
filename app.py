@@ -377,9 +377,7 @@ def build_sankey_from_balance(df: pd.DataFrame, scenario: str | None = None) -> 
 
 
 # Tabs
-tab_food, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs(
-    ["Food-Land system Results"] + theme.TAB_TITLES[3:]
-)
+tab_food, tab_energy, tab8, tab9, tab10, tab11 = st.tabs(theme.TAB_TITLES)
 
 
 with tab_food:
@@ -429,73 +427,76 @@ with tab_food:
         render_line_chart(melted, "Year", "Value", "Component", "Land uses evolution")
 
 
-with tab4:
-    cols = ["Residential", "Agriculture", "Industry", "Energy Products",
-            "Terrestrial Transportation", "Aviation", "Maritime", "Services"]
-    melted, years = prepare_stacked_data(df_energy, selected_scenario, "Year", cols)
-    
-    period_df, period_order = aggregate_to_periods(
-        melted,
-        year_col="Year",
-        value_col="Value",
-        component_col="Component",
-        period_years=4,
-        agg="mean",         # or "sum"
-        label_mode="range"  # "range" -> "2000–2003"; "start" -> "2000"
-    )
-    render_bar_chart(
-        period_df, "PeriodStr", "Value", "Component",
-        "Total energy consumption per sector",
-        period_order,
-        tick_every_years=None  # not needed; x is now periods
-    )
+with tab_energy:
+    explainer_path = BASE_DIR / "content" / "energy_emissions_explainer.md"
+    try:
+        text = explainer_path.read_text(encoding="utf-8")
+        st.markdown(text)
+    except Exception as e:
+        st.warning(f"Explanation file not found at {explainer_path}: {e}")
 
+    # First row: Energy consumption & Energy consumption emissions
+    row1_col1, row1_col2 = st.columns(2)
 
-with tab5:
-    cols = ["Residential", "Agriculture", "Industry", "Energy Products",
-            "Terrestrial Transportation", "Aviation", "Maritime", "Services"]
-    melted, years = prepare_stacked_data(df_energy, selected_scenario, "Year", cols)
-    period_df, period_order = aggregate_to_periods(
-        melted, year_col="Year", value_col="Value", component_col="Component",
-        period_years=4, agg="mean", label_mode="range"
-    )
+    with row1_col1:
+        cols = ["Residential", "Agriculture", "Industry", "Energy Products",
+                "Terrestrial Transportation", "Aviation", "Maritime", "Services"]
+        melted, years = prepare_stacked_data(df_energy, selected_scenario, "Year", cols)
+        period_df, period_order = aggregate_to_periods(
+            melted, year_col="Year", value_col="Value", component_col="Component",
+            period_years=4, agg="mean", label_mode="range"
+        )
+        render_bar_chart(
+            period_df, "PeriodStr", "Value", "Component",
+            "Total energy consumption per sector",
+            period_order
+        )
 
-    render_bar_chart(
-        period_df, "PeriodStr", "Value", "Component",
-        "Emissions energy consumption by sector",
-        period_order
-    )
+    with row1_col2:
+        cols = ["Residential", "Agriculture", "Industry", "Energy Products",
+                "Terrestrial Transportation", "Aviation", "Maritime", "Services"]
+        melted, years = prepare_stacked_data(df_energy, selected_scenario, "Year", cols)
+        period_df, period_order = aggregate_to_periods(
+            melted, year_col="Year", value_col="Value", component_col="Component",
+            period_years=4, agg="mean", label_mode="range"
+        )
+        render_bar_chart(
+            period_df, "PeriodStr", "Value", "Component",
+            "Emissions energy consumption by sector",
+            period_order
+        )
 
-with tab6:
-    cols = ["Hydrogen Generation", "Electricity Generation", "Heat Generation", "Oil Refining"]
-    melted, years = prepare_stacked_data(df_energy_supply, selected_scenario, "Year", cols)
-    
-    period_df, period_order = aggregate_to_periods(
-        melted, year_col="Year", value_col="Value", component_col="Component",
-        period_years=4, agg="mean", label_mode="range"
-    )
+    # Second row: Energy per fuel & Fuel emissions
+    row2_col1, row2_col2 = st.columns(2)
 
-    render_bar_chart(
-        period_df, "PeriodStr", "Value", "Component",
-        "Generated energy per fuel type",
-        period_order,
-        colors=theme.FUEL_COLORS
-    )
+    with row2_col1:
+        cols = ["Hydrogen Generation", "Electricity Generation", "Heat Generation", "Oil Refining"]
+        melted, years = prepare_stacked_data(df_energy_supply, selected_scenario, "Year", cols)
+        period_df, period_order = aggregate_to_periods(
+            melted, year_col="Year", value_col="Value", component_col="Component",
+            period_years=4, agg="mean", label_mode="range"
+        )
+        render_bar_chart(
+            period_df, "PeriodStr", "Value", "Component",
+            "Generated energy per fuel type",
+            period_order,
+            colors=theme.FUEL_COLORS
+        )
 
-with tab7:
-    cols = ["Electricity Generation", "Heat Generation", "Oil Refining"]
-    melted, years = prepare_stacked_data(df_supply_emissions, selected_scenario, "Year", cols)
-    period_df, period_order = aggregate_to_periods(
-        melted, year_col="Year", value_col="Value", component_col="Component",
-        period_years=4, agg="mean", label_mode="range"
-    )
+    with row2_col2:
+        cols = ["Electricity Generation", "Heat Generation", "Oil Refining"]
+        melted, years = prepare_stacked_data(df_supply_emissions, selected_scenario, "Year", cols)
+        period_df, period_order = aggregate_to_periods(
+            melted, year_col="Year", value_col="Value", component_col="Component",
+            period_years=4, agg="mean", label_mode="range"
+        )
+        render_bar_chart(
+            period_df, "PeriodStr", "Value", "Component",
+            "Emissions per fuel type",
+            period_order,
+            colors=theme.FUEL_COLORS
+        )
 
-    render_bar_chart(
-        period_df, "PeriodStr", "Value", "Component",
-        "Generated energy per fuel type",
-        period_order,
-        colors=theme.FUEL_COLORS
-    )
 
 SANKEY_LABEL_MAP = {
     "Service Tertiary Sector": "Service<br>Tertiary",
