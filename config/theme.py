@@ -15,6 +15,7 @@ TAB_TITLES = [
     "⚡ Energy Gen ↔ Cons",
     "🌿 Biofuels",
     "🚢 Ships",
+    "💧 Water Requirements",
 ]
 
 # Fuel charts palette (black, gold, brown)

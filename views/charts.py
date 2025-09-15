@@ -696,3 +696,128 @@ def render_ships_ets_penalty(df_base: pd.DataFrame):
     )
     return fig
 
+def _resolve_ci(df: pd.DataFrame, candidates: list[str]) -> str | None:
+    """Case-insensitive column resolver."""
+    low = {c.lower(): c for c in df.columns}
+    for name in candidates:
+        if name.lower() in low:
+            return low[name.lower()]
+    return None
+
+def render_water_band(
+    df: pd.DataFrame,
+    title: str,
+    year_col: str = "Year",
+    avg_col_candidates: list[str] = None,
+    min_col_candidates: list[str] = None,
+    max_col_candidates: list[str] = None,
+    y_label: str = "Water Requirements [hm³]",
+):
+    """
+    Line (Average) with shaded Min–Max band over years.
+    Provide candidate names for Avg/Min/Max; function will match case-insensitively.
+    """
+    avg_col_candidates = avg_col_candidates or ["Average", f"{title} Average", f"{title} Avg", "Avg"]
+    min_col_candidates = min_col_candidates or ["Min", f"{title} Min", "Minimum"]
+    max_col_candidates = max_col_candidates or ["Max", f"{title} Max", "Maximum"]
+
+    if df.empty:
+        fig = go.Figure(); fig.update_layout(title=f"{title} — no data"); return fig
+
+    ycol = _resolve_ci(df, [year_col, "Year"])
+    ac   = _resolve_ci(df, avg_col_candidates)
+    mic  = _resolve_ci(df, min_col_candidates)
+    mac  = _resolve_ci(df, max_col_candidates)
+
+    if not (ycol and ac and mic and mac):
+        missing = [n for n,v in {"Year":ycol,"Avg":ac,"Min":mic,"Max":mac}.items() if not v]
+        fig = go.Figure(); fig.update_layout(title=f"{title} — missing {', '.join(missing)}"); return fig
+
+    d = df[[ycol, ac, mic, mac]].rename(columns={ycol:"Year", ac:"Avg", mic:"Min", mac:"Max"}).copy()
+    for c in ("Avg","Min","Max"):
+        d[c] = pd.to_numeric(d[c], errors="coerce")
+
+    d = d.sort_values("Year")
+    fig = go.Figure()
+    # Min line (invisible baseline for fill)
+    fig.add_trace(go.Scatter(x=d["Year"], y=d["Min"], mode="lines", line=dict(width=0),
+                             hoverinfo="skip", showlegend=False))
+    # Max fill to previous
+    fig.add_trace(go.Scatter(x=d["Year"], y=d["Max"], mode="lines", line=dict(width=0),
+                             fill="tonexty", fillcolor="rgba(59,130,246,0.20)",  # translucent
+                             name="Range (Min–Max)"))
+    # Avg line
+    fig.add_trace(go.Scatter(x=d["Year"], y=d["Avg"], mode="lines+markers",
+                             name="Average", line=dict(width=2)))
+
+    fig.update_layout(
+        title=title,
+        xaxis_title="Year",
+        yaxis_title=y_label,
+        width=getattr(theme, "CHART_WIDTH", 800),
+        height=getattr(theme, "CHART_HEIGHT", 500),
+        margin=dict(l=10, r=10, t=60, b=10),
+        legend_title=None,
+    )
+    return fig
+
+
+def render_water_monthly_band(
+    df: pd.DataFrame,
+    title: str = "Monthly Water Requirements (2020)",
+    month_col_candidates: list[str] = None,
+    avg_col_candidates: list[str] = None,
+    min_col_candidates: list[str] = None,
+    max_col_candidates: list[str] = None,
+    y_label: str = "Water Requirements [hm³]",
+):
+    """
+    Monthly line (Average) with shaded Min–Max band.
+    Expects a months column (names like JAN..DEC or 1..12).
+    """
+    month_col_candidates = month_col_candidates or ["Month", "Months", "month", "months"]
+    avg_col_candidates   = avg_col_candidates or ["Average", "Avg", f"{title} Average"]
+    min_col_candidates   = min_col_candidates or ["Min", "Minimum", f"{title} Min"]
+    max_col_candidates   = max_col_candidates or ["Max", "Maximum", f"{title} Max"]
+
+    if df is None or df.empty:
+        fig = go.Figure(); fig.update_layout(title=f"{title} — no data"); return fig
+
+    mcol = _resolve_ci(df, month_col_candidates)
+    ac   = _resolve_ci(df, avg_col_candidates)
+    mic  = _resolve_ci(df, min_col_candidates)
+    mac  = _resolve_ci(df, max_col_candidates)
+
+    if not (mcol and ac and mic and mac):
+        missing = [n for n,v in {"Month":mcol,"Avg":ac,"Min":mic,"Max":mac}.items() if not v]
+        fig = go.Figure(); fig.update_layout(title=f"{title} — missing {', '.join(missing)}"); return fig
+
+    d = df[[mcol, ac, mic, mac]].rename(columns={mcol:"Month", ac:"Avg", mic:"Min", mac:"Max"}).copy()
+    for c in ("Avg","Min","Max"):
+        d[c] = pd.to_numeric(d[c], errors="coerce")
+
+    # Order months if textual
+    month_order = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"]
+    if d["Month"].dtype == object:
+        d["Month"] = d["Month"].astype(str).str.strip().str.upper()
+        d["Month"] = pd.Categorical(d["Month"], categories=month_order, ordered=True)
+    d = d.sort_values("Month")
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=d["Month"], y=d["Min"], mode="lines", line=dict(width=0),
+                             hoverinfo="skip", showlegend=False))
+    fig.add_trace(go.Scatter(x=d["Month"], y=d["Max"], mode="lines", line=dict(width=0),
+                             fill="tonexty", fillcolor="rgba(59,130,246,0.20)", name="Range (Min–Max)"))
+    fig.add_trace(go.Scatter(x=d["Month"], y=d["Avg"], mode="lines+markers",
+                             name="Average", line=dict(width=2)))
+
+    fig.update_layout(
+        title=title,
+        xaxis_title="Months",
+        yaxis_title=y_label,
+        width=getattr(theme, "CHART_WIDTH", 800),
+        height=getattr(theme, "CHART_HEIGHT", 500),
+        margin=dict(l=10, r=10, t=60, b=10),
+        legend_title=None,
+    )
+    return fig
