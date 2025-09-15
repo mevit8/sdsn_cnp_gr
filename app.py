@@ -377,8 +377,18 @@ def build_sankey_from_balance(df: pd.DataFrame, scenario: str | None = None) -> 
 
 
 # Tabs
-tab_food, tab_energy, tab8, tab9, tab10, tab11 = st.tabs(theme.TAB_TITLES)
+# Tabs
+tab_overview, tab_food, tab_energy, tab8, tab9, tab10, tab11 = st.tabs(theme.TAB_TITLES)
 
+# Overview Tab
+with tab_overview:
+    st.header("Overview")
+
+    intro_path = Path("content/introduction.md")
+    if intro_path.exists():
+        st.markdown(intro_path.read_text(), unsafe_allow_html=True)
+    else:
+        st.warning("⚠️ content/introduction.md not found.")
 
 with tab_food:
     explainer_path = BASE_DIR / "content" / "food_land_explainer.md"

@@ -5,6 +5,7 @@ LOGO_PATH = "static/logo.png"
 LOGO_WIDTH = 160
 SIDEBAR_TITLE = "### SDSN GCH Scenarios"
 TAB_TITLES = [
+    "📖 Overview",
     "🌱🍽️ Food–Land system Results",
     "⚡🌍 Energy–Emissions",
     "⚡ Energy Gen ↔ Cons",
