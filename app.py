@@ -294,6 +294,20 @@ scenarios = sorted(set(df_costs["Scenario"]).intersection(
 ))
 selected_scenario = st.sidebar.selectbox("🎯 Select Scenario", scenarios)
 
+# Explain to users what the dropdown does
+st.sidebar.markdown(
+    """
+    ℹ️ **How to use the selector**
+
+    Choose between scenarios to update all charts and results:
+
+    - **BAU (Business-as-usual):** projects Greece’s future based on current trends without additional climate measures.  
+    - **SDSN Pathway:** applies the integrated policies and measures described in the *Climate Neutrality Pathways for Greece* report.
+    """,
+    unsafe_allow_html=False
+)
+
+
 # Define which rows act as Sources / Converters / Sinks (as seen in your static Sankey)
 SOURCES = [
     "Coal Lignite Production", "Coal Lignite Imports",

@@ -1,3 +1,5 @@
+Climate Neutrality Pathways for Greece Scenario Selector Dashboard is based on <a href="https://www.unsdsn.org/our-work/sdsn-global-climate-hub">SDSN Global Climate Hub</a> Climate Neutrality Pathways for Greece: <a href="https://unsdsn.globalclimatehub.org/wp-content/uploads/2025/06/REPORT_GCHmodels_SDSNscenario_Greece__2.pdf">Integrated Assessment and Decision Support Tool Report</a>: June 2025
+
 ## The Simulation considers two scenarios: 
 
 **Do-nothing scenario (business-as-usual - BAU)** which assumes that the current trends will continue applying until 2050; 
