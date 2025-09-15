@@ -377,24 +377,57 @@ def build_sankey_from_balance(df: pd.DataFrame, scenario: str | None = None) -> 
 
 
 # Tabs
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs(theme.TAB_TITLES)
+tab_food, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs(
+    ["Food-Land system Results"] + theme.TAB_TITLES[3:]
+)
 
-with tab1:
-    cols = ["FertilizerCost", "LabourCost", "MachineryRunningCost", "DieselCost", "PesticideCost"]
-    melted, years = prepare_stacked_data(df_costs, selected_scenario, "Year", cols)
-    render_bar_chart(melted, "YearStr", "Value", "Component", "Production-based agricultural emissions", [str(y) for y in years])
 
-with tab2:
-    cols = ["CropCO2e", "LiveCO2e", "LandCO2", "FAOTotalCO2e"]
-    melted, years = prepare_stacked_data(df_emissions, selected_scenario, "Year", cols)
-    render_bar_chart(melted, "YearStr", "Value", "Component", "Agricultural production cost", [str(y) for y in years])
+with tab_food:
+    explainer_path = BASE_DIR / "content" / "food_land_explainer.md"
+    if explainer_path.exists():
+        text = explainer_path.read_text(encoding="utf-8")
+        if text.strip():
+            st.markdown(text, unsafe_allow_html=False)
+        else:
+            st.warning("food_land_explainer.md is empty.")
+    else:
+        st.warning(f"Explanation file not found at {explainer_path}")
 
-with tab3:
-    cols = ["FAOCropland", "FAOHarvArea", "FAOPasture", "FAOUrban", "FAOForest", "FAOOtherLand"]
-    df_filtered = df_land[df_land["Scenario"] == selected_scenario].copy()
-    df_filtered[cols] = df_filtered[cols].fillna(0)
-    melted = df_filtered.melt(id_vars=["Year"], value_vars=cols, var_name="Component", value_name="Value")
-    render_line_chart(melted, "Year", "Value", "Component", "Land uses evolution")
+
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        cols = ["FertilizerCost", "LabourCost", "MachineryRunningCost", "DieselCost", "PesticideCost"]
+        melted, years = prepare_stacked_data(df_costs, selected_scenario, "Year", cols)
+        render_bar_chart(
+            melted,
+            "YearStr", "Value", "Component",
+            "Production-based agricultural emissions",
+            [str(y) for y in years]
+        )
+
+    with col2:
+        cols = ["CropCO2e", "LiveCO2e", "LandCO2", "FAOTotalCO2e"]
+        melted, years = prepare_stacked_data(df_emissions, selected_scenario, "Year", cols)
+        render_bar_chart(
+            melted,
+            "YearStr", "Value", "Component",
+            "Agricultural production cost",
+            [str(y) for y in years]
+        )
+
+    col3, = st.columns(1)  # full width
+    with col3:
+        cols = ["FAOCropland", "FAOHarvArea", "FAOPasture", "FAOUrban", "FAOForest", "FAOOtherLand"]
+        df_filtered = df_land[df_land["Scenario"] == selected_scenario].copy()
+        df_filtered[cols] = df_filtered[cols].fillna(0)
+        melted = df_filtered.melt(
+            id_vars=["Year"], value_vars=cols,
+            var_name="Component", value_name="Value"
+        )
+        render_line_chart(melted, "Year", "Value", "Component", "Land uses evolution")
+
 
 with tab4:
     cols = ["Residential", "Agriculture", "Industry", "Energy Products",
