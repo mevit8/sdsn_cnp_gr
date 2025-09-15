@@ -629,9 +629,11 @@ with tab10:
 
         # Special rule: BAU shows ONE number (KPI), not the 8 charts
         if scen == "BAU":
-            # BAU shows a single KPI (not charts)
             st.metric(label="BAU – Total Emissions", value="99.68 MtCO₂e")
-            st.caption("Currently, the Greek fleet is estimated to emit 99.68MtCO2e, which is well above the European regulatory threshold of 97.9MtCO2e.")
+            st.caption(
+                "Currently, the Greek fleet is estimated to emit 99.68 MtCO₂e, "
+                "which is well above the European regulatory threshold of 97.9 MtCO₂e."
+            )
         else:
             col1, col2 = st.columns(2)
             with col1:
@@ -640,6 +642,7 @@ with tab10:
             with col2:
                 fig_new = render_ships_new(base_df)
                 st.plotly_chart(fig_new, use_container_width=False)
+
             col3, col4 = st.columns(2)
             with col3:
                 fig_inv = render_ships_investment_cost(base_df)
@@ -647,6 +650,7 @@ with tab10:
             with col4:
                 fig_op = render_ships_operational_cost(base_df)
                 st.plotly_chart(fig_op, use_container_width=False)
+
             col5, col6 = st.columns(2)
             with col5:
                 fig_fd = render_ships_fuel_demand(base_df)
@@ -654,39 +658,18 @@ with tab10:
             with col6:
                 fig_fc = render_ships_fuel_cost(base_df)
                 st.plotly_chart(fig_fc, use_container_width=False)
+
             col7, col8 = st.columns(2)
             with col7:
-                # Load preferred cap file (default to 'real' if available)
-                cap_candidates = [
-                    Path("data/co2_cap_real.csv"),
-                    Path("data/co2_cap_opt.csv"),
-                    Path("data/co2_cap_pess.csv"),
-                    Path("data/co2_cap_no.csv"),
-                ]
-                available_caps = [p for p in cap_candidates if p.exists()]
+                # 🔒 CO₂ Cap selection hidden — default to None
                 cap_df_to_use = None
-
-                if available_caps:
-                    cap_choice = st.sidebar.selectbox(
-                        "CO₂ Cap series (CSV)",
-                        [p.name for p in available_caps],
-                        index=0,
-                    )
-                    chosen = next(p for p in available_caps if p.name == cap_choice)
-                    tmp_cap = load_cap_series(str(chosen))
-                    if tmp_cap.empty:
-                        st.info(f"{chosen.name} is missing 'Year' and 'CO2_Cap' (or 'Cap'). Using reconstructed cap.")
-                    else:
-                        cap_df_to_use = tmp_cap
-                else:
-                    st.info("No CO₂ Cap file found → reconstructing from Emissions − Excess.")
-
                 fig_emcap = render_ships_emissions_and_cap(base_df, cap_df=cap_df_to_use)
                 st.plotly_chart(fig_emcap, use_container_width=False)
 
             with col8:
                 fig_penalty = render_ships_ets_penalty(base_df)
                 st.plotly_chart(fig_penalty, use_container_width=False)
+
 with tab11:
     st.subheader("💧 Water Requirements")
 
