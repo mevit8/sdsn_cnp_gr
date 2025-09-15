@@ -696,18 +696,11 @@ with tab11:
         st.warning(f"Could not load water data: {e}")
         water = {}
 
-    # Optional debug
-    show_water_debug = st.sidebar.checkbox("🔎 Show water data previews", value=False)
-
     # --- Urban | Agriculture ---
     wcol1, wcol2 = st.columns(2)
 
     with wcol1:
         df_u = water.get("urban")
-        if show_water_debug:
-            st.caption("Urban preview")
-            st.dataframe((df_u if df_u is not None else pd.DataFrame()).head())
-
         fig_u = render_water_band(
             df_u if df_u is not None else pd.DataFrame(),
             title="Urban Water Requirements",
@@ -720,10 +713,6 @@ with tab11:
 
     with wcol2:
         df_a = water.get("agriculture")
-        if show_water_debug:
-            st.caption("Agriculture preview")
-            st.dataframe((df_a if df_a is not None else pd.DataFrame()).head())
-
         fig_a = render_water_band(
             df_a if df_a is not None else pd.DataFrame(),
             title="Agriculture Water Requirements",
@@ -739,10 +728,6 @@ with tab11:
 
     with wcol3:
         df_i = water.get("industrial")
-        if show_water_debug:
-            st.caption("Industrial preview")
-            st.dataframe((df_i if df_i is not None else pd.DataFrame()).head())
-
         fig_i = render_water_band(
             df_i if df_i is not None else pd.DataFrame(),
             title="Industrial Water Requirements",
@@ -755,20 +740,17 @@ with tab11:
 
     with wcol4:
         df_m = water.get("monthly")
-        if show_water_debug:
-            st.caption("Monthly preview")
-            st.dataframe((df_m if df_m is not None else pd.DataFrame()).head())
-
         fig_m = render_water_monthly_band(
             df_m if df_m is not None else pd.DataFrame(),
             title="Monthly Water Requirements (2020)",
-            month_col_candidates=["Month","Months"],
+            month_col_candidates=["Month", "Months"],
             avg_col_candidates=["Average", "Avg", "Mean"],
             min_col_candidates=["Min"],
             max_col_candidates=["Max"],
             y_label="Water Requirements [hm³]",
         )
         st.plotly_chart(fig_m, use_container_width=False)
+
 
 
 
