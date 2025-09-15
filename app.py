@@ -1,8 +1,23 @@
+from __future__ import annotations
 import streamlit as st
 from config import theme
 import pandas as pd
 from models.data_loader import load_and_prepare_excel, prepare_stacked_data
-from views.charts import render_bar_chart, render_line_chart, render_grouped_bar_and_line, render_sankey, render_ships_stock, render_ships_new
+from views.charts import (
+    render_bar_chart,
+    render_line_chart,
+    render_grouped_bar_and_line,
+    render_sankey,
+    render_ships_stock,
+    render_ships_new,
+    render_ships_investment_cost,
+    render_ships_operational_cost,
+    render_ships_fuel_demand,
+    render_ships_fuel_cost,
+    render_ships_emissions_and_cap,
+    render_ships_ets_penalty,
+)
+
 from PIL import Image
 from pathlib import Path
 import plotly.graph_objects as go
@@ -119,6 +134,34 @@ def load_maritime_base(path: str = "data/Maritime_results_all_scenarios.xlsx", s
         if c != "Year":
             df[c] = pd.to_numeric(df[c], errors="coerce")
     return df
+
+@st.cache_data(show_spinner=False)
+def load_cap_series(path: str) -> pd.DataFrame:
+    import pandas as pd
+    # Try common separators
+    for sep in (",", ";", "\t", "|"):
+        try:
+            df = pd.read_csv(path, sep=sep)
+            break
+        except Exception:
+            df = pd.DataFrame()
+    if df.empty:
+        return df
+
+    # Normalize and detect columns
+    df.columns = [str(c).strip() for c in df.columns]
+    lower = {c.lower(): c for c in df.columns}
+    year_col = lower.get("year")
+    cap_col = lower.get("co2_cap") or lower.get("cap")
+    if not year_col or not cap_col:
+        return pd.DataFrame()
+
+    out = df[[year_col, cap_col]].rename(columns={year_col: "Year", cap_col: "CO2_Cap"}).copy()
+    out["Year"] = pd.to_numeric(out["Year"], errors="coerce")
+    out["CO2_Cap"] = pd.to_numeric(out["CO2_Cap"], errors="coerce")
+    out = out.dropna(subset=["Year", "CO2_Cap"]).sort_values("Year")
+    return out
+
 
 # Load data
 df_costs = load_and_prepare_excel("data/Fable_46_Agricultural.xlsx")
@@ -473,22 +516,67 @@ with tab10:
 
         # Special rule: BAU shows ONE number (KPI), not the 8 charts
         if scen == "BAU":
-            stock_cols = [c for c in base_df.columns if c.startswith("Stock_Ships_")]
-            if "Year" in base_df.columns and stock_cols:
-                last_year = int(base_df["Year"].max())
-                total_last = float(base_df.loc[base_df["Year"] == last_year, stock_cols].sum(axis=1).iloc[0])
-                st.metric(label=f"Total Stock Ships ({last_year})", value=f"{int(round(total_last)):,}")
-                st.caption("BAU displays a single KPI as requested.")
-            else:
-                st.info("Maritime base sheet is missing 'Year' or 'Stock_Ships_*' columns.")
+            # BAU shows a single KPI (not charts)
+            st.metric(label="BAU – Total Emissions", value="99.68 MtCO₂e")
+            st.caption("Currently, the Greek fleet is estimated to emit 99.68MtCO2e, which is well above the European regulatory threshold of 97.9MtCO2e.")
         else:
             col1, col2 = st.columns(2)
             with col1:
                 fig = render_ships_stock(base_df)
                 st.plotly_chart(fig, use_container_width=False)
-
             with col2:
                 fig_new = render_ships_new(base_df)
                 st.plotly_chart(fig_new, use_container_width=False)
+            col3, col4 = st.columns(2)
+            with col3:
+                fig_inv = render_ships_investment_cost(base_df)
+                st.plotly_chart(fig_inv, use_container_width=False)
+            with col4:
+                fig_op = render_ships_operational_cost(base_df)
+                st.plotly_chart(fig_op, use_container_width=False)
+            col5, col6 = st.columns(2)
+            with col5:
+                fig_fd = render_ships_fuel_demand(base_df)
+                st.plotly_chart(fig_fd, use_container_width=False)
+            with col6:
+                fig_fc = render_ships_fuel_cost(base_df)
+                st.plotly_chart(fig_fc, use_container_width=False)
+            col7, col8 = st.columns(2)
+            with col7:
+                # Load preferred cap file (default to 'real' if available)
+                cap_candidates = [
+                    Path("data/co2_cap_real.csv"),
+                    Path("data/co2_cap_opt.csv"),
+                    Path("data/co2_cap_pess.csv"),
+                    Path("data/co2_cap_no.csv"),
+                ]
+                available_caps = [p for p in cap_candidates if p.exists()]
+                cap_df_to_use = None
+
+                if available_caps:
+                    cap_choice = st.sidebar.selectbox(
+                        "CO₂ Cap series (CSV)",
+                        [p.name for p in available_caps],
+                        index=0,
+                    )
+                    chosen = next(p for p in available_caps if p.name == cap_choice)
+                    tmp_cap = load_cap_series(str(chosen))
+                    if tmp_cap.empty:
+                        st.info(f"{chosen.name} is missing 'Year' and 'CO2_Cap' (or 'Cap'). Using reconstructed cap.")
+                    else:
+                        cap_df_to_use = tmp_cap
+                else:
+                    st.info("No CO₂ Cap file found → reconstructing from Emissions − Excess.")
+
+                fig_emcap = render_ships_emissions_and_cap(base_df, cap_df=cap_df_to_use)
+                st.plotly_chart(fig_emcap, use_container_width=False)
+
+            with col8:
+                fig_penalty = render_ships_ets_penalty(base_df)
+                st.plotly_chart(fig_penalty, use_container_width=False)
+
+
+
+
 
 

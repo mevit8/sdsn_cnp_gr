@@ -383,83 +383,6 @@ def biofuels_demand_potential_chart(
         margin=dict(l=10,r=10,t=40,b=10)
     )
     return fig
-def render_biofuels_demand_and_potential(
-    df_biofuels: pd.DataFrame,
-    scenario: Literal["BAU","NCNC"] = "BAU",
-    title: str = "Biofuels demand and potential supply [ktoe]"
-):
-    """
-    Renders Chart 1 using the already-loaded LEAP_Biofuels.xlsx dataframe.
-    Expects a wide table: first column = row label, other columns = years.
-    """
-    if df_biofuels.empty:
-        st.info("No data found in LEAP_Biofuels.xlsx.")
-        return
-
-    # Ensure first column is 'Metric'
-    first_col = df_biofuels.columns[0]
-    if first_col != "Metric":
-        df_biofuels = df_biofuels.rename(columns={first_col: "Metric"})
-
-    # Make sure year columns are strings we can convert to int later
-    # (load_and_prepare_excel typically keeps them as numeric/strings; be permissive)
-    year_cols = [c for c in df_biofuels.columns if c != "Metric"]
-
-    # Row labels we need
-    BAR_ROWS = [
-        "Minimum Production Potential [ktoe]",
-        "Maximum Production Potential [ktoe]",
-    ]
-    LINE_ROWS = {
-        "BAU":  "Biofuel Demand Baseline scenario [ktoe]",
-        "NCNC": "Biofuel Demand NECP [ktoe]",
-    }
-    line_row = LINE_ROWS.get((scenario or "BAU").upper(), LINE_ROWS["BAU"])
-
-    # Bars (Min/Max)
-    bar_src = df_biofuels[df_biofuels["Metric"].isin(BAR_ROWS)].copy()
-    bar_long = bar_src.melt(id_vars="Metric", value_vars=year_cols,
-                            var_name="Year", value_name="Value")
-    # Lines (selected scenario only)
-    line_src = df_biofuels[df_biofuels["Metric"] == line_row].copy()
-    line_long = line_src.melt(id_vars="Metric", value_vars=year_cols,
-                              var_name="Year", value_name="Value")
-
-    # Clean types
-    # Coerce year to int when possible
-    def _to_int_safe(x):
-        try:
-            return int(float(x))
-        except Exception:
-            return x
-    bar_long["Year"] = bar_long["Year"].map(_to_int_safe)
-    line_long["Year"] = line_long["Year"].map(_to_int_safe)
-
-    # Rename for the generic renderer
-    bar_long = bar_long.rename(columns={"Metric": "Component"})
-    line_long = line_long.rename(columns={"Metric": "Component"})
-
-    # Sort x if they are numeric years
-    if pd.api.types.is_numeric_dtype(pd.Series([y for y in bar_long["Year"] if isinstance(y, (int, float))])):
-        bar_long = bar_long.sort_values("Year")
-        line_long = line_long.sort_values("Year")
-
-    # Use your shared renderer (grouped bars + single line)
-    render_grouped_bar_and_line(
-        prod_df=bar_long,
-        demand_df=line_long,
-        x_col="Year",
-        y_col="Value",
-        category_col="Component",
-        title=title,
-    )
- # --- append near your other chart renderers ---
-
-
-import pandas as pd
-import plotly.express as px
-from config import theme
-
 def render_ships_stock(df_base: pd.DataFrame):
     """
     Stock Ships [number], stacked by ship type.
@@ -560,5 +483,216 @@ def render_ships_new(df_base: pd.DataFrame):
     )
     fig.update_xaxes(ticks="outside", showline=True)
     fig.update_yaxes(ticks="outside", showline=True, zeroline=True)
+    return fig
+
+import pandas as pd
+import plotly.express as px
+from config import theme
+
+def render_ships_investment_cost(df_base: pd.DataFrame):
+    """
+    Investment Costs [M€], line chart over time.
+    Uses column 'Investment_Cost'.
+    """
+    if df_base.empty or "Year" not in df_base.columns or "Investment_Cost" not in df_base.columns:
+        return px.line(title="Investment Costs — data missing")
+
+    d = df_base[["Year", "Investment_Cost"]].copy()
+    fig = px.line(d, x="Year", y="Investment_Cost", title="Investment Costs [M€]")
+    fig.update_traces(mode="lines+markers")
+
+    fig.update_layout(
+        width=getattr(theme, "CHART_WIDTH", 800),
+        height=getattr(theme, "CHART_HEIGHT", 500),
+        margin=dict(l=10, r=10, t=60, b=10),
+        xaxis_title="Year",
+        yaxis_title="M€",
+        legend_title=None,
+    )
+    return fig
+
+
+def render_ships_operational_cost(df_base: pd.DataFrame):
+    """
+    Operational Costs [M€], line chart over time.
+    Uses column 'Operational_Cost'.
+    """
+    if df_base.empty or "Year" not in df_base.columns or "Operational_Cost" not in df_base.columns:
+        return px.line(title="Operational Costs — data missing")
+
+    d = df_base[["Year", "Operational_Cost"]].copy()
+    fig = px.line(d, x="Year", y="Operational_Cost", title="Operational Costs [M€]")
+    fig.update_traces(mode="lines+markers")
+
+    fig.update_layout(
+        width=getattr(theme, "CHART_WIDTH", 800),
+        height=getattr(theme, "CHART_HEIGHT", 500),
+        margin=dict(l=10, r=10, t=60, b=10),
+        xaxis_title="Year",
+        yaxis_title="M€",
+        legend_title=None,
+    )
+    return fig
+
+def render_ships_fuel_demand(df_base: pd.DataFrame):
+    """
+    Fuel Demand [tonnes], stacked bar by fuel type.
+    """
+    if df_base.empty or "Year" not in df_base.columns:
+        return px.bar(title="Fuel Demand — data missing")
+
+    fuel_cols = [c for c in df_base.columns if c.startswith("Fuel_Demand_")]
+    if not fuel_cols:
+        return px.bar(title="Fuel Demand — no Fuel_Demand_* columns found")
+
+    d_long = (
+        df_base[["Year"] + fuel_cols]
+        .melt(id_vars="Year", var_name="col", value_name="value")
+        .assign(fuel=lambda x: x["col"].str.replace("^Fuel_Demand_", "", regex=True))
+    )
+
+    fig = px.bar(
+        d_long.sort_values(["Year", "fuel"]),
+        x="Year",
+        y="value",
+        color="fuel",
+        title="Fuel Demand [tonnes]",
+        barmode="stack",
+    )
+    fig.update_layout(
+        width=getattr(theme, "CHART_WIDTH", 800),
+        height=getattr(theme, "CHART_HEIGHT", 500),
+        margin=dict(l=10, r=10, t=60, b=10),
+        xaxis_title="Year",
+        yaxis_title="Tonnes",
+        legend_title=None,
+    )
+    return fig
+
+def render_ships_fuel_cost(df_base: pd.DataFrame):
+    """
+    Fuel Costs [M€], line chart over time.
+    Uses column 'Fuel_Cost' (Excel col F).
+    """
+    if df_base.empty or "Year" not in df_base.columns or "Fuel_Cost" not in df_base.columns:
+        return px.line(title="Fuel Costs — data missing")
+
+    d = df_base[["Year", "Fuel_Cost"]].copy()
+    fig = px.line(d, x="Year", y="Fuel_Cost", title="Fuel Costs [M€]")
+    fig.update_traces(mode="lines+markers")
+
+    fig.update_layout(
+        width=getattr(theme, "CHART_WIDTH", 800),
+        height=getattr(theme, "CHART_HEIGHT", 500),
+        margin=dict(l=10, r=10, t=60, b=10),
+        xaxis_title="Year",
+        yaxis_title="M€",
+        legend_title=None,
+    )
+    return fig
+
+def render_ships_emissions_and_cap(
+    df_base: pd.DataFrame,
+    cap_df: pd.DataFrame | None = None,
+    cap_year_col: str = "Year",
+    cap_value_col: str = "CO2_Cap",
+    scale_emissions: float = 1e-6,   # assume tonnes → Mt
+    scale_cap: float = 1e-6,
+    scale_excess: float = 1e-6,
+    y_unit_label: str = "Mt CO₂e",
+):
+    """
+    CO₂ Emissions vs Cap [Mt], with shaded Excess area.
+    Expects df_base with 'Year', 'CO2_Emissions', and optionally 'Excess_Emissions'.
+    If cap_df is given, uses its Year/Cap columns. Otherwise reconstructs Cap = Emissions - Excess.
+    """
+    if df_base.empty or "Year" not in df_base.columns:
+        fig = go.Figure(); fig.update_layout(title="CO₂ Emissions & Cap — no data"); return fig
+
+    # case-insensitive col lookup
+    def _resolve(df: pd.DataFrame, names: list[str]) -> str | None:
+        lower = {c.lower(): c for c in df.columns}
+        for n in names:
+            if n.lower() in lower: return lower[n.lower()]
+        return None
+
+    em_col = _resolve(df_base, ["CO2_Emissions", "CO2 Emissions"])
+    ex_col = _resolve(df_base, ["Excess_Emissions", "Excess Emissions"])
+    if not em_col:
+        fig = go.Figure(); fig.update_layout(title="CO₂ Emissions & Cap — missing emissions col"); return fig
+
+    d = df_base[["Year", em_col] + ([ex_col] if ex_col else [])].copy()
+    d = d.rename(columns={em_col: "Emissions"})
+    if ex_col: d = d.rename(columns={ex_col: "Excess"})
+
+    # attach cap
+    if cap_df is not None and not cap_df.empty:
+        cap_work = cap_df.rename(columns={cap_year_col: "Year", cap_value_col: "Cap"})[["Year", "Cap"]].copy()
+        d = d.merge(cap_work, on="Year", how="left")
+    else:
+        d["Cap"] = d["Emissions"] - d.get("Excess", 0)
+
+    # scale
+    d["Emissions"] = pd.to_numeric(d["Emissions"], errors="coerce") * scale_emissions
+    d["Cap"]       = pd.to_numeric(d["Cap"], errors="coerce") * scale_cap
+    if "Excess" in d: d["Excess"] = pd.to_numeric(d["Excess"], errors="coerce") * scale_excess
+
+    d = d.sort_values("Year"); x = d["Year"]
+    fig = go.Figure()
+
+    if d["Cap"].notna().any():
+        fig.add_trace(go.Scatter(x=x, y=d["Cap"], name="CO₂ Cap", mode="lines", line=dict(width=2, dash="dash")))
+    fig.add_trace(go.Scatter(x=x, y=d["Emissions"], name="CO₂ Emissions", mode="lines+markers", line=dict(width=2)))
+
+    if "Excess" in d and d["Excess"].fillna(0).abs().sum() > 0:
+        cap_series = d["Cap"]
+        top  = d["Emissions"].where(d["Excess"] > 0)
+        base = cap_series.where(d["Excess"] > 0)
+        fig.add_trace(go.Scatter(x=x, y=base, mode="lines", line=dict(width=0), hoverinfo="skip", showlegend=False))
+        fig.add_trace(go.Scatter(x=x, y=top, name="Excess Emissions", mode="lines", line=dict(width=0),
+                                 fill="tonexty", fillcolor="rgba(220,38,38,0.3)"))
+
+    fig.update_layout(
+        title=f"CO₂ Emissions and Cap [{y_unit_label}]",
+        xaxis_title="Year", yaxis_title=y_unit_label,
+        width=getattr(theme, "CHART_WIDTH", 800),
+        height=getattr(theme, "CHART_HEIGHT", 500),
+        margin=dict(l=10,r=10,t=60,b=10), legend_title=None,
+    )
+    return fig
+
+
+def render_ships_ets_penalty(df_base: pd.DataFrame):
+    """
+    ETS Penalty [M€], line chart over time.
+    Accepts column naming variants: ETS_Penalty / Ets_Penalty / ets_penalty / ETS penalty / ETH_Penalty.
+    """
+    if df_base.empty or "Year" not in df_base.columns:
+        return px.line(title="ETS Penalty — no data")
+
+    # Resolve the penalty column case-insensitively (and tolerate ETH typo)
+    penalty_col = None
+    lower_map = {c.lower(): c for c in df_base.columns}
+    for key in ["ets_penalty", "ets penalty", "eth_penalty"]:
+        if key in lower_map:
+            penalty_col = lower_map[key]
+            break
+
+    if not penalty_col:
+        return px.line(title="ETS Penalty — 'ETS_Penalty' column not found")
+
+    d = df_base[["Year", penalty_col]].rename(columns={penalty_col: "ETS_Penalty"}).copy()
+    d["ETS_Penalty"] = pd.to_numeric(d["ETS_Penalty"], errors="coerce")
+
+    fig = px.line(d, x="Year", y="ETS_Penalty", title="ETS Penalty [M€]")
+    fig.update_traces(mode="lines+markers")
+    fig.update_layout(
+        width=getattr(theme, "CHART_WIDTH", 800),
+        height=getattr(theme, "CHART_HEIGHT", 500),
+        margin=dict(l=10, r=10, t=60, b=10),
+        xaxis_title="Year",
+        yaxis_title="M€",
+        legend_title=None,
+    )
     return fig
 
