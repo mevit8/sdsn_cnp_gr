@@ -1,12 +1,50 @@
-html, body, [class*="css"] {
-    font-family: 'Segoe UI', sans-serif;
+/* =========================
+   Sidebar spacing
+   ========================= */
+
+/* Space below logo */
+section[data-testid="stSidebar"] .stImage {
+    margin-top: 0.5rem;     /* optional breathing from top */
+    margin-bottom: 1.5rem;  /* space below logo */
 }
-h1, h2, h3 {
+
+/* Space below the scenario dropdown */
+section[data-testid="stSidebar"] .stSelectbox {
+    margin-bottom: 1.5rem;
+}
+
+/* =========================
+   Font sizes & headers
+   ========================= */
+
+/* Base font size */
+html, body, [class*="css"] {
+    font-size: 15px;  /* balanced base font */
+}
+
+/* Headers (reduce Streamlit defaults) */
+h1 {
+    font-size: 1.8rem !important;
     font-weight: 600;
 }
-.sidebar .sidebar-content {
-    background-color: #f9f9f9;
+h2 {
+    font-size: 1.4rem !important;
+    font-weight: 600;
 }
-footer {
-    visibility: hidden;
+h3 {
+    font-size: 1.2rem !important;
+    font-weight: 500;
+}
+
+/* Sidebar font size */
+section[data-testid="stSidebar"] {
+    font-size: 14px;
+}
+
+/* =========================
+   Tabs (highlight active)
+   ========================= */
+.stTabs [role="tab"][aria-selected="true"] {
+    color: #004C97 !important;   /* SDSN blue */
+    font-weight: 600;
 }

@@ -108,6 +108,8 @@ if LOGO_PATH.exists():
         st.sidebar.image(str(LOGO_PATH), width=160)
 else:
     st.sidebar.info(f"Logo not found at: {LOGO_PATH}")
+# Add breathing space
+st.sidebar.markdown(" ")
 
 @st.cache_data(show_spinner=False)
 def load_biofuels_simple(path: str = "data/LEAP_Biofuels.xlsx", sheet: str = "Biofuels") -> pd.DataFrame:

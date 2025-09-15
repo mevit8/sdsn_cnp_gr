@@ -1,0 +1,8 @@
+[theme]
+base="light"
+primaryColor="#004C97"              # deep SDSN blue (from logo)
+backgroundColor="#ffffff"           # clean white
+secondaryBackgroundColor="#f7f9fb"  # very light grey for sidebar/panels
+textColor="#1a1a1a"                 # dark grey, easier than pure black
+font="sans serif"
+
