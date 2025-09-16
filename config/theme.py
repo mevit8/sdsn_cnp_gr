@@ -43,3 +43,30 @@ def normalize(label: str) -> str:
 
 CHART_WIDTH = 800  # default width for all charts
 CHART_HEIGHT = 500  # optional
+
+# theme.py
+
+EMISSIONS_COLORS = {
+    "Livestock": "#f87171",   # pink/red
+    "Crops": "#34d399",       # green
+    "Land-use": "#facc15",    # yellow
+    "Total emissions": "#2563eb",  # blue line
+}
+
+COST_COLORS = {
+    "LabourCost": "#92400e",         # brown
+    "PesticideCost": "#22d3ee",      # turquoise
+    "MachineryRunningCost": "#60a5fa", # light blue
+    "DieselCost": "#9ca3af",         # gray
+    "FertilizerCost": "#facc15",     # yellow
+}
+
+LANDUSE_COLORS = {
+    "FAOCropland": "#ef4444",    # red
+    "FAOHarvArea": "#fb923c",    # orange-red
+    "FAOPasture": "#facc15",     # yellow
+    "FAOUrban": "#9ca3af",       # gray
+    "FAOForest": "#22c55e",      # green
+    "FAOOtherLand": "#374151",   # dark gray
+}
+
