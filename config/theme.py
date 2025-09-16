@@ -6,14 +6,13 @@ LOGO_WIDTH = 160
 SIDEBAR_TITLE = "### SDSN GCH Scenarios"
 TAB_TITLES = [
     "📖 Overview",
-    "🌱🍽️ Food–Land system",
+    "🌱🍽️ Food–Land",
     "⚡🌍 Energy–Emissions",
     "⚡ Energy Gen ↔ Cons",
     "🌿 Biofuels",
     "🚢 Shipping",
     "💧 Water Requirements",
 ]
-
 
 # Fuel charts palette (black, gold, brown)
 # Make sure the keys match  melted 'Component' values exactly.

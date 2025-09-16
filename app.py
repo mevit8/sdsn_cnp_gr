@@ -23,7 +23,7 @@ from PIL import Image
 import plotly.graph_objects as go
 from pathlib import Path
 
-st.set_page_config(page_title="SDSN GCH", layout="wide")
+st.set_page_config(page_title="SDSN GCH - GR Climate Neutrality", layout="wide")
 
 @st.cache_data(show_spinner=False)
 def load_energy_balance(path: str = "data/LEAP_Energy_Balance.xlsx") -> pd.DataFrame:
@@ -405,7 +405,7 @@ with tab_food:
     if explainer_path.exists():
         text = explainer_path.read_text(encoding="utf-8")
         if text.strip():
-            st.markdown(text, unsafe_allow_html=False)
+            st.markdown(text, unsafe_allow_html=True)
         else:
             st.warning("food_land_explainer.md is empty.")
     else:
@@ -631,7 +631,7 @@ with tab9:
 
     # a) Demand vs Potential Supply
     with col1:
-        st.markdown("**Biofuels demand and potential supply [ktoe]**")
+        # st.markdown("**Biofuels demand and potential supply [ktoe]**")
 
         # Bars: Min/Max production potential
         bar_long = (
@@ -666,7 +666,7 @@ with tab9:
 
     # b) Potential for Biofuels Export
     with col2:
-        st.markdown("**Potential for Biofuels Export [ktoe]**")
+        # st.markdown("**Potential for Biofuels Export [ktoe]**")
 
         # Prefer explicit export cols; otherwise compute from potential − demand
         if scen_key == "BAU":
@@ -701,7 +701,7 @@ with tab9:
             fig.add_trace(go.Bar(x=sub["Year"], y=sub["Value"], name=comp, marker_color=color))
 
         fig.update_layout(
-            title=f"Export potential ({scen_key})",
+            title=f"Potential for Biofuels Export ({scen_key})",
             barmode="group",
             xaxis_title="Year",
             yaxis_title="ktoe",

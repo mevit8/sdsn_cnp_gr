@@ -16,9 +16,8 @@ Ecosystems Economic Valuation & Beyond-GDP models, and General Computable Equili
 This app shows scenario results for Greece.
 
 <p align="center">
-  <img src="modelling_flowchart.png" width="600">
+  <img src="https://raw.githubusercontent.com/mevit8/sdsn_cnp_gr/main/content/modelling_flowchart.png" width="800">
 </p>
-
 
 More specifically, we used:
 

@@ -10,4 +10,4 @@ Emissions & ETS Impact: Emissions exceed the cap by 6MT in 2050; ETS penalties b
 Decarbonization Challenges: Full decarbonization by 2050 is unlikely without subsidies, technology advancements, and stronger commitments. 
 Policy & Infrastructure Needs: Coordinated regulatory support, fuel-saving technologies, and alternative fuel bunkering infrastructure are essential for a smooth green transition.
 
-The *MaritimeGCH* model is an Investment Decision Support Tool (IDST), based on dynamic linear programming optimization (Alamanos & Koundouri, 2024; Alamanos, 2025). 
+The *MaritimeGCH* model is an Investment Decision Support Tool (IDST), based on dynamic linear programming optimization (Alamanos, 2025). 
