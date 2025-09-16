@@ -8,8 +8,6 @@ from config import theme
 import pandas as pd
 
 ColorSpec = Union[Dict[str, str], List[str], None]
-
-
 # -----------------------------
 # Helpers
 # -----------------------------
@@ -72,8 +70,6 @@ def _hex_to_rgba(hex_color: str, alpha: float) -> str:
     g = int(hex_color[2:4], 16)
     b = int(hex_color[4:6], 16)
     return f"rgba({r},{g},{b},{alpha})"
-
-
 # -----------------------------
 # Generic Charts
 # -----------------------------
@@ -146,8 +142,6 @@ def render_grouped_bar_and_line(prod_df, demand_df, x_col, y_col,
         yaxis_title=y_label if y_label else y_col
     )
     st.plotly_chart(fig, use_container_width=True, key=key or f"{title}_grouped")
-
-
 # -----------------------------
 # Sankey (no y-axis)
 # -----------------------------
@@ -227,100 +221,202 @@ def render_sankey(
     if plot:
         st.plotly_chart(fig, use_container_width=full_width, key=key or f"{title}_sankey")
     return fig
-
-
 # -----------------------------
 # Ships Charts
 # -----------------------------
-def render_ships_stock(df_base: pd.DataFrame, key=None):
+# -----------------------------
+# Ships Charts (refactored)
+# -----------------------------
+def render_ships_stock(df_base: pd.DataFrame, y_label: str = "Number of Stock Ships"):
     if df_base.empty:
         return px.bar(title="Stock Ships — no data")
+
     stock_cols = [c for c in df_base.columns if c.startswith("Stock_Ships_")]
     if "Year" not in df_base.columns or not stock_cols:
         return px.bar(title="Stock Ships — expected 'Year' and 'Stock_Ships_*' columns")
+
     d_long = (
         df_base[["Year"] + stock_cols]
         .melt(id_vars="Year", var_name="col", value_name="value")
         .assign(type=lambda x: x["col"].str.replace("^Stock_Ships_", "", regex=True))
     )
-    fig = px.bar(d_long, x="Year", y="value", color="type", title="Stock Ships [number]", barmode="stack")
-    st.plotly_chart(fig, use_container_width=True, key=key or "ships_stock")
+
+    pref = ["C", "T", "B", "G", "O"]
+    seen = list(dict.fromkeys([t for t in pref if t in d_long["type"].unique()]))
+    rest = [t for t in sorted(d_long["type"].unique()) if t not in seen]
+    order = seen + rest
+    d_long["type"] = pd.Categorical(d_long["type"], categories=order, ordered=True)
+
+    fig = px.bar(
+        d_long.sort_values(["Year", "type"]),
+        x="Year", y="value", color="type",
+        title="Stock Ships",
+        barmode="stack",
+    )
+    fig.update_layout(
+        width=getattr(theme, "CHART_WIDTH", 800),
+        height=getattr(theme, "CHART_HEIGHT", 500),
+        margin=dict(l=10, r=10, t=60, b=10),
+        xaxis_title="",
+        yaxis_title=y_label,
+        legend_title=None,
+    )
     return fig
 
 
-def render_ships_new(df_base: pd.DataFrame, key=None):
+def render_ships_new(df_base: pd.DataFrame, y_label: str = "Number of New Ships"):
     if df_base.empty:
         return px.bar(title="New Ships — no data")
+
     cols = [c for c in df_base.columns if c.lower().startswith("new_ships_")]
     if not cols:
         cols = [c for c in df_base.columns if c.lower().startswith("new_")]
+
     if "Year" not in df_base.columns or not cols:
         return px.bar(title="New Ships — expected 'Year' and 'New_Ships_*' columns")
+
     d_long = (
         df_base[["Year"] + cols]
         .melt(id_vars="Year", var_name="col", value_name="value")
     )
-    d_long["type"] = d_long["col"].str.replace("^New_Ships_", "", regex=True)
-    fig = px.bar(d_long, x="Year", y="value", color="type", title="New Ships [number]", barmode="stack")
-    st.plotly_chart(fig, use_container_width=True, key=key or "ships_new")
+    def _extract_type(col: str) -> str:
+        cl = col.lower()
+        if cl.startswith("new_ships_"):
+            return col.split("_", 2)[-1]
+        if cl.startswith("new_"):
+            return col.split("_", 1)[-1]
+        return col
+    d_long["type"] = d_long["col"].map(_extract_type)
+
+    pref = ["C", "T", "B", "G", "O"]
+    seen = list(dict.fromkeys([t for t in pref if t in d_long["type"].unique()]))
+    rest = [t for t in sorted(d_long["type"].unique()) if t not in seen]
+    order = seen + rest
+    d_long["type"] = pd.Categorical(d_long["type"], categories=order, ordered=True)
+
+    fig = px.bar(
+        d_long.sort_values(["Year", "type"]),
+        x="Year", y="value", color="type",
+        title="New Ships",
+        barmode="stack",
+    )
+    fig.update_layout(
+        width=getattr(theme, "CHART_WIDTH", 800),
+        height=getattr(theme, "CHART_HEIGHT", 500),
+        margin=dict(l=10, r=10, t=60, b=10),
+        xaxis_title="",
+        yaxis_title=y_label,
+        legend_title=None,
+    )
     return fig
 
 
-def render_ships_investment_cost(df_base: pd.DataFrame, key=None):
+def render_ships_investment_cost(df_base: pd.DataFrame, y_label: str = "Costs (M€)"):
     if df_base.empty or "Year" not in df_base.columns or "Investment_Cost" not in df_base.columns:
         return px.line(title="Investment Costs — data missing")
+
     d = df_base[["Year", "Investment_Cost"]].copy()
-    fig = px.line(d, x="Year", y="Investment_Cost", title="Investment Costs [M€]")
+    fig = px.line(d, x="Year", y="Investment_Cost", title="Investment Costs")
     fig.update_traces(mode="lines+markers")
-    st.plotly_chart(fig, use_container_width=True, key=key or "ships_investment_cost")
+    fig.update_layout(
+        width=getattr(theme, "CHART_WIDTH", 800),
+        height=getattr(theme, "CHART_HEIGHT", 500),
+        margin=dict(l=10, r=10, t=60, b=10),
+        xaxis_title="",
+        yaxis_title=y_label,
+        legend_title=None,
+    )
     return fig
 
 
-def render_ships_operational_cost(df_base: pd.DataFrame, key=None):
+def render_ships_operational_cost(df_base: pd.DataFrame, y_label: str = "Costs (M€)"):
     if df_base.empty or "Year" not in df_base.columns or "Operational_Cost" not in df_base.columns:
         return px.line(title="Operational Costs — data missing")
+
     d = df_base[["Year", "Operational_Cost"]].copy()
-    fig = px.line(d, x="Year", y="Operational_Cost", title="Operational Costs [M€]")
+    fig = px.line(d, x="Year", y="Operational_Cost", title="Operational Costs")
     fig.update_traces(mode="lines+markers")
-    st.plotly_chart(fig, use_container_width=True, key=key or "ships_operational_cost")
+    fig.update_layout(
+        width=getattr(theme, "CHART_WIDTH", 800),
+        height=getattr(theme, "CHART_HEIGHT", 500),
+        margin=dict(l=10, r=10, t=60, b=10),
+        xaxis_title="",
+        yaxis_title=y_label,
+        legend_title=None,
+    )
     return fig
 
 
-def render_ships_fuel_demand(df_base: pd.DataFrame, key=None):
+def render_ships_fuel_demand(df_base: pd.DataFrame, y_label: str = "Fuel Demand [tonnes]"):
     if df_base.empty or "Year" not in df_base.columns:
         return px.bar(title="Fuel Demand — data missing")
+
     fuel_cols = [c for c in df_base.columns if c.startswith("Fuel_Demand_")]
     if not fuel_cols:
         return px.bar(title="Fuel Demand — no Fuel_Demand_* columns found")
+
     d_long = (
         df_base[["Year"] + fuel_cols]
         .melt(id_vars="Year", var_name="col", value_name="value")
         .assign(fuel=lambda x: x["col"].str.replace("^Fuel_Demand_", "", regex=True))
     )
-    fig = px.bar(d_long, x="Year", y="value", color="fuel", title="Fuel Demand [tonnes]", barmode="stack")
-    st.plotly_chart(fig, use_container_width=True, key=key or "ships_fuel_demand")
+
+    fig = px.bar(
+        d_long.sort_values(["Year", "fuel"]),
+        x="Year", y="value", color="fuel",
+        title="Fuel Demand",
+        barmode="stack",
+    )
+    fig.update_layout(
+        width=getattr(theme, "CHART_WIDTH", 800),
+        height=getattr(theme, "CHART_HEIGHT", 500),
+        margin=dict(l=10, r=10, t=60, b=10),
+        xaxis_title="",
+        yaxis_title=y_label,
+        legend_title=None,
+    )
     return fig
 
 
-def render_ships_fuel_cost(df_base: pd.DataFrame, key=None):
+def render_ships_fuel_cost(df_base: pd.DataFrame, y_label: str = "Costs (M€)"):
     if df_base.empty or "Year" not in df_base.columns or "Fuel_Cost" not in df_base.columns:
         return px.line(title="Fuel Costs — data missing")
+
     d = df_base[["Year", "Fuel_Cost"]].copy()
-    fig = px.line(d, x="Year", y="Fuel_Cost", title="Fuel Costs [M€]")
+    fig = px.line(d, x="Year", y="Fuel_Cost", title="Fuel Costs")
     fig.update_traces(mode="lines+markers")
-    st.plotly_chart(fig, use_container_width=True, key=key or "ships_fuel_cost")
+    fig.update_layout(
+        width=getattr(theme, "CHART_WIDTH", 800),
+        height=getattr(theme, "CHART_HEIGHT", 500),
+        margin=dict(l=10, r=10, t=60, b=10),
+        xaxis_title="",
+        yaxis_title=y_label,
+        legend_title=None,
+    )
     return fig
 
 
-def render_ships_emissions_and_cap(df_base: pd.DataFrame, cap_df: pd.DataFrame | None = None,
-                                   cap_year_col: str = "Year", cap_value_col: str = "CO2_Cap",
-                                   scale_emissions: float = 1e-6, scale_cap: float = 1e-6,
-                                   scale_excess: float = 1e-6, y_unit_label: str = "Mt CO₂e", key=None):
+def render_ships_emissions_and_cap(
+    df_base: pd.DataFrame,
+    cap_df: pd.DataFrame | None = None,
+    cap_year_col: str = "Year",
+    cap_value_col: str = "CO2_Cap",
+    scale_emissions: float = 1e-6,
+    scale_cap: float = 1e-6,
+    scale_excess: float = 1e-6,
+    y_label: str = "CO₂ Emissions (MtCO₂e)",
+):
     if df_base.empty or "Year" not in df_base.columns:
         fig = go.Figure(); fig.update_layout(title="CO₂ Emissions & Cap — no data"); return fig
 
-    em_col = _resolve_ci(df_base, ["CO2_Emissions", "CO2 Emissions"])
-    ex_col = _resolve_ci(df_base, ["Excess_Emissions", "Excess Emissions"])
+    def _resolve(df: pd.DataFrame, names: list[str]) -> str | None:
+        lower = {c.lower(): c for c in df.columns}
+        for n in names:
+            if n.lower() in lower: return lower[n.lower()]
+        return None
+
+    em_col = _resolve(df_base, ["CO2_Emissions", "CO2 Emissions"])
+    ex_col = _resolve(df_base, ["Excess_Emissions", "Excess Emissions"])
     if not em_col:
         fig = go.Figure(); fig.update_layout(title="CO₂ Emissions & Cap — missing emissions col"); return fig
 
@@ -340,9 +436,11 @@ def render_ships_emissions_and_cap(df_base: pd.DataFrame, cap_df: pd.DataFrame |
 
     d = d.sort_values("Year"); x = d["Year"]
     fig = go.Figure()
+
     if d["Cap"].notna().any():
         fig.add_trace(go.Scatter(x=x, y=d["Cap"], name="CO₂ Cap", mode="lines", line=dict(width=2, dash="dash")))
     fig.add_trace(go.Scatter(x=x, y=d["Emissions"], name="CO₂ Emissions", mode="lines+markers", line=dict(width=2)))
+
     if "Excess" in d and d["Excess"].fillna(0).abs().sum() > 0:
         cap_series = d["Cap"]
         top  = d["Emissions"].where(d["Excess"] > 0)
@@ -350,12 +448,46 @@ def render_ships_emissions_and_cap(df_base: pd.DataFrame, cap_df: pd.DataFrame |
         fig.add_trace(go.Scatter(x=x, y=base, mode="lines", line=dict(width=0), hoverinfo="skip", showlegend=False))
         fig.add_trace(go.Scatter(x=x, y=top, name="Excess Emissions", mode="lines", line=dict(width=0),
                                  fill="tonexty", fillcolor="rgba(220,38,38,0.3)"))
-    fig.update_layout(title=f"CO₂ Emissions and Cap [{y_unit_label}]", xaxis_title="", yaxis_title=y_unit_label)
-    st.plotly_chart(fig, use_container_width=True, key=key or "ships_emissions_cap")
+
+    fig.update_layout(
+        title="CO₂ Emissions and Cap",
+        xaxis_title="",
+        yaxis_title=y_label,
+        width=getattr(theme, "CHART_WIDTH", 800),
+        height=getattr(theme, "CHART_HEIGHT", 500),
+        margin=dict(l=10,r=10,t=60,b=10), legend_title=None,
+    )
     return fig
 
 
-def render_ships_ets_penalty(df_base: pd.DataFrame, key=None):
+def render_ships_ets_penalty(df_base: pd.DataFrame, y_label: str = "Costs (M€)"):
+    if df_base.empty or "Year" not in df_base.columns:
+        return px.line(title="ETS Penalty — no data")
+
+    penalty_col = None
+    lower_map = {c.lower(): c for c in df_base.columns}
+    for key in ["ets_penalty", "ets penalty", "eth_penalty"]:
+        if key in lower_map:
+            penalty_col = lower_map[key]; break
+
+    if not penalty_col:
+        return px.line(title="ETS Penalty — 'ETS_Penalty' column not found")
+
+    d = df_base[["Year", penalty_col]].rename(columns={penalty_col: "ETS_Penalty"}).copy()
+    d["ETS_Penalty"] = pd.to_numeric(d["ETS_Penalty"], errors="coerce")
+
+    fig = px.line(d, x="Year", y="ETS_Penalty", title="ETS Penalty")
+    fig.update_traces(mode="lines+markers")
+    fig.update_layout(
+        width=getattr(theme, "CHART_WIDTH", 800),
+        height=getattr(theme, "CHART_HEIGHT", 500),
+        margin=dict(l=10, r=10, t=60, b=10),
+        xaxis_title="",
+        yaxis_title=y_label,
+        legend_title=None,
+    )
+    return fig
+
     if df_base.empty or "Year" not in df_base.columns:
         return px.line(title="ETS Penalty — no data")
     penalty_col = _resolve_ci(df_base, ["ETS_Penalty", "ets_penalty", "ETS penalty", "eth_penalty"])
@@ -367,8 +499,6 @@ def render_ships_ets_penalty(df_base: pd.DataFrame, key=None):
     fig.update_traces(mode="lines+markers")
     st.plotly_chart(fig, use_container_width=True, key=key or "ships_ets_penalty")
     return fig
-
-
 # -----------------------------
 # Water Charts
 # -----------------------------

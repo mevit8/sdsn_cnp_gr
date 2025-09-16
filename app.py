@@ -281,6 +281,7 @@ df_costs = load_and_prepare_excel("data/Fable_46_Agricultural.xlsx")
 df_emissions = load_and_prepare_excel("data/Fable_46_GHG.xlsx")
 df_land = load_and_prepare_excel("data/Fable_46_Land.xlsx")
 df_energy = load_and_prepare_excel("data/LEAP_Demand_Cons.xlsx")
+df_demand_emissions = load_and_prepare_excel("data/LEAP_Demand_Emissions.xlsx")
 df_energy_supply = load_and_prepare_excel("data/LEAP_Supply.xlsx")
 df_supply_emissions = load_and_prepare_excel("data/LEAP_Supply_Emissions.xlsx")
 df_energy_balance = load_energy_balance("data/LEAP_Energy_Balance.xlsx")
@@ -491,13 +492,15 @@ with tab_energy:
         render_bar_chart(
             period_df, "PeriodStr", "Value", "Component",
             "Total energy consumption per sector",
-            period_order
+            period_order,
+            y_label="ktoe",
+            key="energy_consumption"
         )
 
     with row1_col2:
         cols = ["Residential", "Agriculture", "Industry", "Energy Products",
                 "Terrestrial Transportation", "Aviation", "Maritime", "Services"]
-        melted, years = prepare_stacked_data(df_energy, selected_scenario, "Year", cols)
+        melted, years = prepare_stacked_data(df_demand_emissions, selected_scenario, "Year", cols)
         period_df, period_order = aggregate_to_periods(
             melted, year_col="Year", value_col="Value", component_col="Component",
             period_years=4, agg="mean", label_mode="range"
@@ -505,7 +508,9 @@ with tab_energy:
         render_bar_chart(
             period_df, "PeriodStr", "Value", "Component",
             "Emissions energy consumption by sector",
-            period_order
+            period_order,
+            y_label="MtCO₂e",
+            key="energy_demand_emissions"
         )
 
     # Second row: Energy per fuel & Fuel emissions
@@ -522,7 +527,9 @@ with tab_energy:
             period_df, "PeriodStr", "Value", "Component",
             "Generated energy per fuel type",
             period_order,
-            colors=theme.FUEL_COLORS
+            colors=theme.FUEL_COLORS,
+            y_label="ktoe",
+            key="energy_generated_fuel"
         )
 
     with row2_col2:
@@ -536,7 +543,9 @@ with tab_energy:
             period_df, "PeriodStr", "Value", "Component",
             "Emissions per fuel type",
             period_order,
-            colors=theme.FUEL_COLORS
+            colors=theme.FUEL_COLORS,
+            y_label="MtCO₂e",
+            key="emissions_per_fuel"
         )
 
 
@@ -656,6 +665,8 @@ with tab9:
             category_col="Component",
             title=f"Biofuels demand vs potential supply ({scen_key})",
             height=theme.CHART_HEIGHT,
+            y_label="ktoe",
+            key="biofuels_demand_supply"
         )
 
     # b) Potential for Biofuels Export
@@ -686,7 +697,6 @@ with tab9:
             .melt(id_vars=["Year"], var_name="Component", value_name="Value")
         )
 
-        import plotly.graph_objects as go
         fig = go.Figure()
         for comp, color in [
             ("Min export potential [ktoe]", "#86efac"),
@@ -705,8 +715,7 @@ with tab9:
             margin=dict(t=60, r=10, b=10, l=10),
             legend_title_text="Series",
         )
-        st.plotly_chart(fig, use_container_width=False)
-
+        st.plotly_chart(fig, use_container_width=False, key="biofuels_export")
 
 with tab10:
     explainer_path = BASE_DIR / "content" / "ships_explainer.md"
@@ -714,8 +723,6 @@ with tab10:
         st.markdown(explainer_path.read_text(encoding="utf-8"))
     else:
         st.warning(f"Explanation file not found at {explainer_path}")
-
-    # st.subheader("🚢 Ships")
 
     try:
         base_df = load_maritime_base()
@@ -734,38 +741,37 @@ with tab10:
         else:
             col1, col2 = st.columns(2)
             with col1:
-                fig = render_ships_stock(base_df)
-                st.plotly_chart(fig, use_container_width=False)
+                fig = render_ships_stock(base_df, y_label="Number of Stock Ships")
+                st.plotly_chart(fig, use_container_width=False, key="ships_stock")
             with col2:
-                fig_new = render_ships_new(base_df)
-                st.plotly_chart(fig_new, use_container_width=False)
+                fig_new = render_ships_new(base_df, y_label="Number of New Ships")
+                st.plotly_chart(fig_new, use_container_width=False, key="ships_new")
 
             col3, col4 = st.columns(2)
             with col3:
-                fig_inv = render_ships_investment_cost(base_df)
-                st.plotly_chart(fig_inv, use_container_width=False)
+                fig_inv = render_ships_investment_cost(base_df, y_label="Costs (M€)")
+                st.plotly_chart(fig_inv, use_container_width=False, key="ships_investment_cost")
             with col4:
-                fig_op = render_ships_operational_cost(base_df)
-                st.plotly_chart(fig_op, use_container_width=False)
+                fig_op = render_ships_operational_cost(base_df, y_label="Costs (M€)")
+                st.plotly_chart(fig_op, use_container_width=False, key="ships_operational_cost")
 
             col5, col6 = st.columns(2)
             with col5:
-                fig_fd = render_ships_fuel_demand(base_df)
-                st.plotly_chart(fig_fd, use_container_width=False)
+                fig_fd = render_ships_fuel_demand(base_df, y_label="Fuel Demand [tonnes]")
+                st.plotly_chart(fig_fd, use_container_width=False, key="ships_fuel_demand")
             with col6:
-                fig_fc = render_ships_fuel_cost(base_df)
-                st.plotly_chart(fig_fc, use_container_width=False)
+                fig_fc = render_ships_fuel_cost(base_df, y_label="Costs (M€)")
+                st.plotly_chart(fig_fc, use_container_width=False, key="ships_fuel_cost")
 
             col7, col8 = st.columns(2)
             with col7:
                 # 🔒 CO₂ Cap selection hidden — default to None
                 cap_df_to_use = None
-                fig_emcap = render_ships_emissions_and_cap(base_df, cap_df=cap_df_to_use)
-                st.plotly_chart(fig_emcap, use_container_width=False)
-
+                fig_emcap = render_ships_emissions_and_cap(base_df, cap_df=cap_df_to_use, y_label="CO₂ Emissions (MtCO₂e)")
+                st.plotly_chart(fig_emcap, use_container_width=False, key="ships_emissions_and_cap")
             with col8:
-                fig_penalty = render_ships_ets_penalty(base_df)
-                st.plotly_chart(fig_penalty, use_container_width=False)
+                fig_penalty = render_ships_ets_penalty(base_df, y_label="Costs (M€)")
+                st.plotly_chart(fig_penalty, use_container_width=False, key="ships_ets_penalty")
 
 with tab11:
     explainer_path = BASE_DIR / "content" / "water_explainer.md"
