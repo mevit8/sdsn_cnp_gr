@@ -1,0 +1,1 @@
+* Currently, the Greek fleet is estimated to emit 99.68 MtCO₂e, which is well above the European regulatory threshold of 97.9 MtCO₂e.*

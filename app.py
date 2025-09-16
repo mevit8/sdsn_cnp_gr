@@ -25,6 +25,22 @@ from pathlib import Path
 
 st.set_page_config(page_title="SDSN GCH - GR Climate Neutrality", layout="wide")
 
+def load_scenario_md(base_name: str, scenario: str) -> str | None:
+    """
+    Return the text of a scenario-specific Markdown file if it exists.
+    - Tries content/{base_name}_{SCENARIO}.md first
+    - Falls back to content/{base_name}.md
+    """
+    scen = (scenario or "").strip().upper()
+    candidates = [
+        BASE_DIR / "content" / f"{base_name}_{scen}.md",  # e.g. ships_explainer_BAU.md
+        BASE_DIR / "content" / f"{base_name}.md"          # fallback default
+    ]
+    for path in candidates:
+        if path.exists():
+            return path.read_text(encoding="utf-8")
+    return None
+
 @st.cache_data(show_spinner=False)
 def load_energy_balance(path: str = "data/LEAP_Energy_Balance.xlsx") -> pd.DataFrame:
     df = pd.read_excel(path, sheet_name="Sheet1")
@@ -401,16 +417,28 @@ with tab_overview:
         st.warning("⚠️ content/introduction.md not found.")
 
 with tab_food:
-    explainer_path = BASE_DIR / "content" / "food_land_explainer.md"
-    if explainer_path.exists():
-        text = explainer_path.read_text(encoding="utf-8")
+    scen = (selected_scenario or "").strip().upper()
+
+    # Scenario-specific explainer first
+    scen_file = BASE_DIR / "content" / f"food_land_explainer_{scen}.md"
+    default_file = BASE_DIR / "content" / "food_land_explainer.md"
+
+    if scen_file.exists():
+        text = scen_file.read_text(encoding="utf-8")
+        if text.strip():
+            st.markdown(text, unsafe_allow_html=True)
+        else:
+            st.warning(f"{scen_file.name} is empty.")
+    elif default_file.exists():
+        text = default_file.read_text(encoding="utf-8")
         if text.strip():
             st.markdown(text, unsafe_allow_html=True)
         else:
             st.warning("food_land_explainer.md is empty.")
     else:
-        st.warning(f"Explanation file not found at {explainer_path}")
+        st.warning(f"No food explainer found for scenario {scen} or default.")
 
+    # --- Layout for charts ---
     col1, col2 = st.columns(2)
 
     # --- Emissions (Mt CO₂e) ---
@@ -465,13 +493,28 @@ with tab_food:
             key="food_landuse"
         )
 
+
 with tab_energy:
-    explainer_path = BASE_DIR / "content" / "energy_emissions_explainer.md"
-    try:
-        text = explainer_path.read_text(encoding="utf-8")
-        st.markdown(text)
-    except Exception as e:
-        st.warning(f"Explanation file not found at {explainer_path}: {e}")
+    scen = (selected_scenario or "").strip().upper()
+
+    # Scenario-specific explainer first
+    scen_file = BASE_DIR / "content" / f"energy_emissions_explainer_{scen}.md"
+    default_file = BASE_DIR / "content" / "energy_emissions_explainer.md"
+
+    if scen_file.exists():
+        text = scen_file.read_text(encoding="utf-8")
+        if text.strip():
+            st.markdown(text, unsafe_allow_html=True)
+        else:
+            st.warning(f"{scen_file.name} is empty.")
+    elif default_file.exists():
+        text = default_file.read_text(encoding="utf-8")
+        if text.strip():
+            st.markdown(text, unsafe_allow_html=True)
+        else:
+            st.warning("energy_emissions_explainer.md is empty.")
+    else:
+        st.warning(f"No energy explainer found for scenario {scen} or default.")
 
     # First row: Energy consumption & Energy consumption emissions
     row1_col1, row1_col2 = st.columns(2)
@@ -558,11 +601,26 @@ SANKEY_LABEL_MAP = {
 }
 
 with tab8:
-    explainer_path = BASE_DIR / "content" / "energy_balance_explainer.md"
-    if explainer_path.exists():
-        st.markdown(explainer_path.read_text(encoding="utf-8"))
+    scen = (selected_scenario or "").strip().upper()
+
+    # Scenario-specific explainer first
+    scen_file = BASE_DIR / "content" / f"energy_balance_explainer_{scen}.md"
+    default_file = BASE_DIR / "content" / "energy_balance_explainer.md"
+
+    if scen_file.exists():
+        text = scen_file.read_text(encoding="utf-8")
+        if text.strip():
+            st.markdown(text, unsafe_allow_html=True)
+        else:
+            st.warning(f"{scen_file.name} is empty.")
+    elif default_file.exists():
+        text = default_file.read_text(encoding="utf-8")
+        if text.strip():
+            st.markdown(text, unsafe_allow_html=True)
+        else:
+            st.warning("energy_balance_explainer.md is empty.")
     else:
-        st.warning(f"Explanation file not found at {explainer_path}")
+        st.warning(f"No energy balance explainer found for scenario {scen} or default.")
 
     SANKEY_NODE_COLORS = {
         # fuels/carriers
@@ -596,7 +654,6 @@ with tab8:
         "Waste": "#d1d5db",
     }
 
-    # st.subheader("⚡ Energy Generation ↔ Consumption (Balance)")
     try:
         links_df, node_order = build_sankey_from_balance(df_energy_balance, scenario=selected_scenario)
         if links_df.empty:
@@ -614,14 +671,29 @@ with tab8:
     except Exception as e:
         st.error(f"Failed to build Sankey: {e}")
 
-with tab9:
-    explainer_path = BASE_DIR / "content" / "biofuels_explainer.md"
-    if explainer_path.exists():
-        st.markdown(explainer_path.read_text(encoding="utf-8"))
-    else:
-        st.warning(f"Explanation file not found at {explainer_path}")
 
+with tab9:
     scen = (selected_scenario or "").strip().upper()
+
+    # Scenario-specific explainer first
+    scen_file = BASE_DIR / "content" / f"biofuels_explainer_{scen}.md"
+    default_file = BASE_DIR / "content" / "biofuels_explainer.md"
+
+    if scen_file.exists():
+        text = scen_file.read_text(encoding="utf-8")
+        if text.strip():
+            st.markdown(text, unsafe_allow_html=True)
+        else:
+            st.warning(f"{scen_file.name} is empty.")
+    elif default_file.exists():
+        text = default_file.read_text(encoding="utf-8")
+        if text.strip():
+            st.markdown(text, unsafe_allow_html=True)
+        else:
+            st.warning("biofuels_explainer.md is empty.")
+    else:
+        st.warning(f"No biofuels explainer found for scenario {scen} or default.")
+
     scen_key = "BAU" if scen == "BAU" else "NCNC"  # default to NCNC for anything else
 
     # -----------------------------
@@ -631,8 +703,6 @@ with tab9:
 
     # a) Demand vs Potential Supply
     with col1:
-        # st.markdown("**Biofuels demand and potential supply [ktoe]**")
-
         # Bars: Min/Max production potential
         bar_long = (
             df_biofuels
@@ -666,8 +736,6 @@ with tab9:
 
     # b) Potential for Biofuels Export
     with col2:
-        # st.markdown("**Potential for Biofuels Export [ktoe]**")
-
         # Prefer explicit export cols; otherwise compute from potential − demand
         if scen_key == "BAU":
             col_min_exp, col_max_exp = "ExportMin_BAU_ktoe", "ExportMax_BAU_ktoe"
@@ -712,12 +780,14 @@ with tab9:
         )
         st.plotly_chart(fig, use_container_width=False, key="biofuels_export")
 
+
 with tab10:
-    explainer_path = BASE_DIR / "content" / "ships_explainer.md"
-    if explainer_path.exists():
-        st.markdown(explainer_path.read_text(encoding="utf-8"))
+    # Load scenario-specific explainer if it exists
+    text = load_scenario_md("ships_explainer", selected_scenario)
+    if text:
+        st.markdown(text, unsafe_allow_html=True)
     else:
-        st.warning(f"Explanation file not found at {explainer_path}")
+        st.warning("No Ships explainer found for this scenario.")
 
     try:
         base_df = load_maritime_base()
@@ -729,10 +799,6 @@ with tab10:
         # Special rule: BAU shows ONE number (KPI), not the 8 charts
         if scen == "BAU":
             st.metric(label="BAU – Total Emissions", value="99.68 MtCO₂e")
-            st.caption(
-                "Currently, the Greek fleet is estimated to emit 99.68 MtCO₂e, "
-                "which is well above the European regulatory threshold of 97.9 MtCO₂e."
-            )
         else:
             col1, col2 = st.columns(2)
             with col1:
@@ -760,83 +826,90 @@ with tab10:
 
             col7, col8 = st.columns(2)
             with col7:
-                # 🔒 CO₂ Cap selection hidden — default to None
                 cap_df_to_use = None
-                fig_emcap = render_ships_emissions_and_cap(base_df, cap_df=cap_df_to_use, y_label="CO₂ Emissions (MtCO₂e)")
+                fig_emcap = render_ships_emissions_and_cap(
+                    base_df, cap_df=cap_df_to_use, y_label="CO₂ Emissions (MtCO₂e)"
+                )
                 st.plotly_chart(fig_emcap, use_container_width=False, key="ships_emissions_and_cap")
             with col8:
                 fig_penalty = render_ships_ets_penalty(base_df, y_label="Costs (M€)")
                 st.plotly_chart(fig_penalty, use_container_width=False, key="ships_ets_penalty")
 
+
 with tab11:
-    explainer_path = BASE_DIR / "content" / "water_explainer.md"
-    if explainer_path.exists():
-        st.markdown(explainer_path.read_text(encoding="utf-8"))
+    scen = (selected_scenario or "").strip().upper()
+
+    if scen != "NCNC":
+        st.info("💧 Water requirements are only available for the NCNC scenario.")
     else:
-        st.warning(f"Explanation file not found at {explainer_path}")
+        # Load explainer only for NCNC
+        text = load_scenario_md("water_explainer", scen)
+        if text:
+            st.markdown(text, unsafe_allow_html=True)
+        else:
+            st.warning("No Water explainer found for NCNC scenario.")
 
-    # st.subheader("💧 Water Requirements")
+        try:
+            water = load_water_requirements()
+        except Exception as e:
+            st.warning(f"Could not load water data: {e}")
+            water = {}
 
-    try:
-        water = load_water_requirements()
-    except Exception as e:
-        st.warning(f"Could not load water data: {e}")
-        water = {}
+        # --- Urban | Agriculture ---
+        wcol1, wcol2 = st.columns(2)
 
-    # --- Urban | Agriculture ---
-    wcol1, wcol2 = st.columns(2)
+        with wcol1:
+            df_u = water.get("urban")
+            fig_u = render_water_band(
+                df_u if df_u is not None else pd.DataFrame(),
+                title="Urban Water Requirements",
+                avg_col_candidates=["Average"],
+                min_col_candidates=["Min"],
+                max_col_candidates=["Max"],
+                y_label="Water Requirements [hm³]",
+            )
+            st.plotly_chart(fig_u, use_container_width=False)
 
-    with wcol1:
-        df_u = water.get("urban")
-        fig_u = render_water_band(
-            df_u if df_u is not None else pd.DataFrame(),
-            title="Urban Water Requirements",
-            avg_col_candidates=["Average"],
-            min_col_candidates=["Min"],
-            max_col_candidates=["Max"],
-            y_label="Water Requirements [hm³]",
-        )
-        st.plotly_chart(fig_u, use_container_width=False)
+        with wcol2:
+            df_a = water.get("agriculture")
+            fig_a = render_water_band(
+                df_a if df_a is not None else pd.DataFrame(),
+                title="Agriculture Water Requirements",
+                avg_col_candidates=["Average"],
+                min_col_candidates=["Min"],
+                max_col_candidates=["Max"],
+                y_label="Water Requirements [hm³]",
+            )
+            st.plotly_chart(fig_a, use_container_width=False)
 
-    with wcol2:
-        df_a = water.get("agriculture")
-        fig_a = render_water_band(
-            df_a if df_a is not None else pd.DataFrame(),
-            title="Agriculture Water Requirements",
-            avg_col_candidates=["Average"],
-            min_col_candidates=["Min"],
-            max_col_candidates=["Max"],
-            y_label="Water Requirements [hm³]",
-        )
-        st.plotly_chart(fig_a, use_container_width=False)
+        # --- Industrial | Monthly ---
+        wcol3, wcol4 = st.columns(2)
 
-    # --- Industrial | Monthly ---
-    wcol3, wcol4 = st.columns(2)
+        with wcol3:
+            df_i = water.get("industrial")
+            fig_i = render_water_band(
+                df_i if df_i is not None else pd.DataFrame(),
+                title="Industrial Water Requirements",
+                avg_col_candidates=["Average"],
+                min_col_candidates=["Min"],
+                max_col_candidates=["Max"],
+                y_label="Water Requirements [hm³]",
+            )
+            st.plotly_chart(fig_i, use_container_width=False)
 
-    with wcol3:
-        df_i = water.get("industrial")
-        fig_i = render_water_band(
-            df_i if df_i is not None else pd.DataFrame(),
-            title="Industrial Water Requirements",
-            avg_col_candidates=["Average"],
-            min_col_candidates=["Min"],
-            max_col_candidates=["Max"],
-            y_label="Water Requirements [hm³]",
-        )
-        st.plotly_chart(fig_i, use_container_width=False)
+        with wcol4:
+            df_m = water.get("monthly")
+            fig_m = render_water_monthly_band(
+                df_m if df_m is not None else pd.DataFrame(),
+                title="Monthly Water Requirements (2020)",
+                month_col_candidates=["Month", "Months"],
+                avg_col_candidates=["Average", "Avg", "Mean"],
+                min_col_candidates=["Min"],
+                max_col_candidates=["Max"],
+                y_label="Water Requirements [hm³]",
+            )
+            st.plotly_chart(fig_m, use_container_width=False)
 
-    with wcol4:
-        df_m = water.get("monthly")
-        fig_m = render_water_monthly_band(
-            df_m if df_m is not None else pd.DataFrame(),
-            title="Monthly Water Requirements (2020)",
-            month_col_candidates=["Month", "Months"],
-            avg_col_candidates=["Average", "Avg", "Mean"],
-            min_col_candidates=["Min"],
-            max_col_candidates=["Max"],
-            y_label="Water Requirements [hm³]",
-        )
-        st.plotly_chart(fig_m, use_container_width=False)
 
 
 

@@ -34,3 +34,18 @@ More specifically, we used:
 - The BiofuelGCH Calculator to estimate the potential for biofuels' production using crop residues.
 
 - All the models run under a common simulation period, 2020 to 2050, at an annual time-step. 
+
+**References**
+
+Alamanos, A. (2025). MaritimeGCH [Computer software]. https://github.com/Alamanos11/MaritimeGCH
+
+Alamanos, A., & Koundouri, P. (2024). Estimating the water requirements per sector in Europe.
+https://www.researchgate.net/profile/Angelos-
+Alamanos/publication/386245556_Estimating_the_water_requirements_per_sector_in_Europe/links/6
+749d5873d17281c7deacbd1/Estimating-the-water-requirements-per-sector-in-
+Europe.pdf?__cf_chl_tk=fHpUHdaHJiBdO64MqGFr6VdICQGVzayXeMIMNj0xgg8-1738254361-1.0.1.1-
+gml.ztb2RIAZtV8FEt_VNzJfQjcHuYhn1AAaEIVwPNk
+
+Heaps, C.G., (2022). LEAP: The Low Emissions Analysis Platform (Version 2024.1.1.15) [Computer software]. Stockholm Environment Institute. https://leap.sei.org
+
+Mosnier, A., Penescu, L., Pérez-Guzmán, K., Steinhauser, J., Thomson, M., Douzal, C., & Poncet, J. (2020). FABLE Calculator 2020 update. https://doi.org/10.22022/ESM/12-2020.16934
