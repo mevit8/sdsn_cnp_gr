@@ -6,11 +6,11 @@ LOGO_WIDTH = 160
 SIDEBAR_TITLE = "### SDSN GCH Scenarios"
 TAB_TITLES = [
     "📖 Overview",
-    "🌱🍽️ Food–Land system Results",
+    "🌱🍽️ Food–Land system",
     "⚡🌍 Energy–Emissions",
     "⚡ Energy Gen ↔ Cons",
     "🌿 Biofuels",
-    "🚢 Ships",
+    "🚢 Shipping",
     "💧 Water Requirements",
 ]
 

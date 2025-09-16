@@ -19,15 +19,11 @@ from views.charts import (
     render_water_band,
     render_water_monthly_band,
 )
-
 from PIL import Image
-from pathlib import Path
 import plotly.graph_objects as go
+from pathlib import Path
 
-
-st.set_page_config(page_title="SDSN GCH Scenarios", layout="wide")
-
-import pandas as pd
+st.set_page_config(page_title="SDSN GCH", layout="wide")
 
 @st.cache_data(show_spinner=False)
 def load_energy_balance(path: str = "data/LEAP_Energy_Balance.xlsx") -> pd.DataFrame:
@@ -303,7 +299,7 @@ st.sidebar.markdown(
     Choose between scenarios to update all charts and results:
 
     - **BAU (Business-as-usual):** projects Greece’s future based on current trends without additional climate measures.  
-    - **SDSN Pathway:** applies the integrated policies and measures described in the *Climate Neutrality Pathways for Greece* report.
+    - **NCNC:** applies the policies and measures described in the main sectoral climate neutrality pathways for Greece.
     """,
     unsafe_allow_html=False
 )
@@ -391,7 +387,6 @@ def build_sankey_from_balance(df: pd.DataFrame, scenario: str | None = None) -> 
     return links_df, node_order
 
 
-# Tabs
 # Tabs
 tab_overview, tab_food, tab_energy, tab8, tab9, tab10, tab11 = st.tabs(theme.TAB_TITLES)
 
