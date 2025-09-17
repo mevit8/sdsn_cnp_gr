@@ -404,7 +404,7 @@ def build_sankey_from_balance(df: pd.DataFrame, scenario: str | None = None) -> 
 
 
 # Tabs
-tab_overview, tab_food, tab_energy, tab8, tab9, tab10, tab11 = st.tabs(theme.TAB_TITLES)
+tab_overview, tab_food, tab_energy, tab9, tab10, tab11 = st.tabs(theme.TAB_TITLES)
 
 # Overview Tab
 with tab_overview:
@@ -586,21 +586,21 @@ with tab_energy:
             key="emissions_per_fuel"
         )
 
+    st.markdown("---")  # visual separator
 
-SANKEY_LABEL_MAP = {
-    "Service Tertiary Sector": "Service<br>Tertiary",
-    "Passenger Transportation": "Passenger<br>Transport",
-    "Freight Transportation": "Freight<br>Transport",
-    "Energy Product Industry": "Energy Product<br>Industry",
-    "Coal Lignite Production": "Coal/Lignite<br>Production",
-    "Coal Lignite Imports": "Coal/Lignite<br>Imports",
-    "Coal Unspecified Imports": "Coal (unspec.)<br>Imports",
-    "Refinery Feedstocks Imports": "Refinery Feedstocks<br>Imports",
-    "Synthetic Fuels Module": "Synthetic<br>Fuels Module",
-    "Transmission and Distribution": "Transmission &<br>Distribution",
-}
+    SANKEY_LABEL_MAP = {
+        "Service Tertiary Sector": "Service<br>Tertiary",
+        "Passenger Transportation": "Passenger<br>Transport",
+        "Freight Transportation": "Freight<br>Transport",
+        "Energy Product Industry": "Energy Product<br>Industry",
+        "Coal Lignite Production": "Coal/Lignite<br>Production",
+        "Coal Lignite Imports": "Coal/Lignite<br>Imports",
+        "Coal Unspecified Imports": "Coal (unspec.)<br>Imports",
+        "Refinery Feedstocks Imports": "Refinery Feedstocks<br>Imports",
+        "Synthetic Fuels Module": "Synthetic<br>Fuels Module",
+        "Transmission and Distribution": "Transmission &<br>Distribution",
+    }
 
-with tab8:
     scen = (selected_scenario or "").strip().upper()
 
     # Scenario-specific explainer first

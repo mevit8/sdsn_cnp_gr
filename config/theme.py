@@ -8,7 +8,6 @@ TAB_TITLES = [
     "📖 Overview",
     "🌱🍽️ Food–Land",
     "⚡🌍 Energy–Emissions",
-    "⚡ Energy Gen ↔ Cons",
     "🌿 Biofuels",
     "🚢 Shipping",
     "💧 Water Requirements",
