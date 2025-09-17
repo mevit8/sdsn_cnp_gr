@@ -312,7 +312,7 @@ st.sidebar.markdown(
     """
     ℹ️ **How to use the selector**
 
-    Choose between scenarios to update all charts and results:
+    Choose a scenario from the drop-down menu to update all figures with the respective results, and read their commentary:
 
     - **BAU (Business-as-usual):** projects Greece’s future based on current trends without additional climate measures.  
     - **NCNC:** applies the policies and measures described in the main sectoral climate neutrality pathways for Greece.

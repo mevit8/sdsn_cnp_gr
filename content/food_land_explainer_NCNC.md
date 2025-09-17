@@ -1,4 +1,4 @@
-## Food–Land System Results
+## Food–Land System
 
 **GHG Emissions** The NCNC scenario cuts agricultural GHG emissions by 50% (3 MtCO₂e) by 2050 compared to BAU, mainly through reduced livestock emissions and increased land-based carbon withdrawals.
 

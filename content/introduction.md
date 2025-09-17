@@ -11,15 +11,13 @@ Ecosystems Economic Valuation & Beyond-GDP models, and General Computable Equili
 
 ## Model Integration
 
-# Introduction
-
-This app shows scenario results for Greece.
+**Conceptual flowchart showing how the different models are combined**
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/mevit8/sdsn_cnp_gr/main/content/modelling_flowchart.png" width="800">
 </p>
 
-More specifically, we used:
+List of models used and their role in our framework:
 
 - FABLE Calculator (Mosnier et al., 2020) for the potential evolution of food and land-use systems; 
 
@@ -36,6 +34,7 @@ More specifically, we used:
 - All the models run under a common simulation period, 2020 to 2050, at an annual time-step. 
 
 **References**
+Koundouri P., Alamanos A., Arampatzidis I., Devves S., Dellis K., Deranian C., Nisiforou O. (2025). ClimateNeutrality Pathways for Greece: Integrated Assessment and Decision Support Tool. Report, UN SDSNGlobal Climate Hub. June 2025, Athens, Greece. DOI: 10.13140/RG.2.2.15107.62248
 
 Alamanos, A. (2025). MaritimeGCH [Computer software]. https://github.com/Alamanos11/MaritimeGCH
 
