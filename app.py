@@ -404,7 +404,7 @@ def build_sankey_from_balance(df: pd.DataFrame, scenario: str | None = None) -> 
 
 
 # Tabs
-tab_overview, tab_food, tab_energy, tab9, tab10, tab11 = st.tabs(theme.TAB_TITLES)
+tab_overview, tab_food, tab_energy, tab9, tab10, tab11, tab_sdsn = st.tabs(theme.TAB_TITLES)
 
 # Overview Tab
 with tab_overview:
@@ -670,8 +670,6 @@ with tab_energy:
             )
     except Exception as e:
         st.error(f"Failed to build Sankey: {e}")
-
-
 with tab9:
     scen = (selected_scenario or "").strip().upper()
 
@@ -779,8 +777,7 @@ with tab9:
             legend_title_text="Series",
         )
         st.plotly_chart(fig, use_container_width=False, key="biofuels_export")
-
-
+         
 with tab10:
     # Load scenario-specific explainer if it exists
     text = load_scenario_md("ships_explainer", selected_scenario)
@@ -839,76 +836,89 @@ with tab10:
 with tab11:
     scen = (selected_scenario or "").strip().upper()
 
-    if scen != "NCNC":
-        st.info("💧 Water requirements are only available for the NCNC scenario.")
+    # Load explainer for all scenarios
+    text = load_scenario_md("water_explainer", scen)
+    if text:
+        st.markdown(text, unsafe_allow_html=True)
     else:
-        # Load explainer only for NCNC
-        text = load_scenario_md("water_explainer", scen)
-        if text:
+        st.warning("No Water explainer found for this scenario.")
+
+    try:
+        water = load_water_requirements()
+    except Exception as e:
+        st.warning(f"Could not load water data: {e}")
+        water = {}
+
+    # --- Urban | Agriculture ---
+    wcol1, wcol2 = st.columns(2)
+
+    with wcol1:
+        df_u = water.get("urban")
+        fig_u = render_water_band(
+            df_u if df_u is not None else pd.DataFrame(),
+            title="Urban Water Requirements",
+            avg_col_candidates=["Average"],
+            min_col_candidates=["Min"],
+            max_col_candidates=["Max"],
+            y_label="Water Requirements [hm³]",
+        )
+        st.plotly_chart(fig_u, use_container_width=False)
+
+    with wcol2:
+        df_a = water.get("agriculture")
+        fig_a = render_water_band(
+            df_a if df_a is not None else pd.DataFrame(),
+            title="Agriculture Water Requirements",
+            avg_col_candidates=["Average"],
+            min_col_candidates=["Min"],
+            max_col_candidates=["Max"],
+            y_label="Water Requirements [hm³]",
+        )
+        st.plotly_chart(fig_a, use_container_width=False)
+
+    # --- Industrial | Monthly ---
+    wcol3, wcol4 = st.columns(2)
+
+    with wcol3:
+        df_i = water.get("industrial")
+        fig_i = render_water_band(
+            df_i if df_i is not None else pd.DataFrame(),
+            title="Industrial Water Requirements",
+            avg_col_candidates=["Average"],
+            min_col_candidates=["Min"],
+            max_col_candidates=["Max"],
+            y_label="Water Requirements [hm³]",
+        )
+        st.plotly_chart(fig_i, use_container_width=False)
+
+    with wcol4:
+        df_m = water.get("monthly")
+        fig_m = render_water_monthly_band(
+            df_m if df_m is not None else pd.DataFrame(),
+            title="Monthly Water Requirements (2020)",
+            month_col_candidates=["Month", "Months"],
+            avg_col_candidates=["Average", "Avg", "Mean"],
+            min_col_candidates=["Min"],
+            max_col_candidates=["Max"],
+            y_label="Water Requirements [hm³]",
+        )
+        st.plotly_chart(fig_m, use_container_width=False)
+
+with tab_sdsn:
+    st.header("About SDSN Greece")
+
+    # Load Markdown from file
+    sdsn_file = BASE_DIR / "content" / "sdsn_explainer.md"
+
+    if sdsn_file.exists():
+        text = sdsn_file.read_text(encoding="utf-8")
+        if text.strip():
             st.markdown(text, unsafe_allow_html=True)
         else:
-            st.warning("No Water explainer found for NCNC scenario.")
+            st.warning("sdsn_explainer.md exists but is empty.")
+    else:
+        st.warning("⚠️ content/sdsn.md not found.")
 
-        try:
-            water = load_water_requirements()
-        except Exception as e:
-            st.warning(f"Could not load water data: {e}")
-            water = {}
-
-        # --- Urban | Agriculture ---
-        wcol1, wcol2 = st.columns(2)
-
-        with wcol1:
-            df_u = water.get("urban")
-            fig_u = render_water_band(
-                df_u if df_u is not None else pd.DataFrame(),
-                title="Urban Water Requirements",
-                avg_col_candidates=["Average"],
-                min_col_candidates=["Min"],
-                max_col_candidates=["Max"],
-                y_label="Water Requirements [hm³]",
-            )
-            st.plotly_chart(fig_u, use_container_width=False)
-
-        with wcol2:
-            df_a = water.get("agriculture")
-            fig_a = render_water_band(
-                df_a if df_a is not None else pd.DataFrame(),
-                title="Agriculture Water Requirements",
-                avg_col_candidates=["Average"],
-                min_col_candidates=["Min"],
-                max_col_candidates=["Max"],
-                y_label="Water Requirements [hm³]",
-            )
-            st.plotly_chart(fig_a, use_container_width=False)
-
-        # --- Industrial | Monthly ---
-        wcol3, wcol4 = st.columns(2)
-
-        with wcol3:
-            df_i = water.get("industrial")
-            fig_i = render_water_band(
-                df_i if df_i is not None else pd.DataFrame(),
-                title="Industrial Water Requirements",
-                avg_col_candidates=["Average"],
-                min_col_candidates=["Min"],
-                max_col_candidates=["Max"],
-                y_label="Water Requirements [hm³]",
-            )
-            st.plotly_chart(fig_i, use_container_width=False)
-
-        with wcol4:
-            df_m = water.get("monthly")
-            fig_m = render_water_monthly_band(
-                df_m if df_m is not None else pd.DataFrame(),
-                title="Monthly Water Requirements (2020)",
-                month_col_candidates=["Month", "Months"],
-                avg_col_candidates=["Average", "Avg", "Mean"],
-                min_col_candidates=["Min"],
-                max_col_candidates=["Max"],
-                y_label="Water Requirements [hm³]",
-            )
-            st.plotly_chart(fig_m, use_container_width=False)
 
 
 

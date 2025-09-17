@@ -1,16 +1,17 @@
 from typing import Dict, List
 
-APP_TITLE = "📊 Scenario Dashboard"
+APP_TITLE = "📊 SDSN GCH - GR Climate Neutrality"
 LOGO_PATH = "static/logo.png"
 LOGO_WIDTH = 160
 SIDEBAR_TITLE = "### SDSN GCH Scenarios"
 TAB_TITLES = [
     "📖 Overview",
-    "🌱🍽️ Food–Land",
-    "⚡🌍 Energy–Emissions",
+    "🌱 Food–Land",
+    "⚡ Energy–Emissions",
     "🌿 Biofuels",
     "🚢 Shipping",
     "💧 Water Requirements",
+    "🌍 SDSN Pathway",
 ]
 
 # Fuel charts palette (black, gold, brown)
