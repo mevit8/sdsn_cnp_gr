@@ -177,6 +177,8 @@ def load_cap_series(path: str) -> pd.DataFrame:
     out = out.dropna(subset=["Year", "CO2_Cap"]).sort_values("Year")
     return out
 @st.cache_data(show_spinner=False)
+
+@st.cache_data(show_spinner=False)
 def load_water_requirements(
     uses_path: str | Path | None = None,
     month_path: str | Path | None = None,
@@ -188,33 +190,105 @@ def load_water_requirements(
     month_path = month_path or (DATA_DIR / "Greeceplots_month.xlsx")
     out: dict[str, pd.DataFrame | None] = {"urban": None, "agriculture": None, "industrial": None, "monthly": None}
 
-    # ---------- uses (wide 'in' sheet with *.min/avr/max) ----------
-    try:
-        xls = pd.ExcelFile(uses_path)
-        sheet = "in" if "in" in xls.sheet_names else xls.sheet_names[0]
-        df = xls.parse(sheet)
-        df.columns = [str(c).strip() for c in df.columns]
-        lower = {c.lower(): c for c in df.columns}
+    # ---------- helpers ----------
+    def norm_months(x: pd.Series) -> pd.Series:
+        names = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"]
+        s = x.astype(str).str.strip().str.upper()
+        gr = {"ΙΑΝ":"JAN","ΦΕΒ":"FEB","ΜΑΡ":"MAR","ΑΠΡ":"APR","ΜΑΙ":"MAY","ΙΟΥΝ":"JUN",
+              "ΙΟΥΛ":"JUL","ΑΥΓ":"AUG","ΣΕΠ":"SEP","ΟΚΤ":"OCT","ΝΟΕ":"NOV","ΔΕΚ":"DEC"}
+        def conv(v: str):
+            try:
+                n = int(float(v))
+                if 1 <= n <= 12:
+                    return names[n-1]
+            except Exception:
+                pass
+            return gr.get(v, v)
+        return pd.Categorical(s.map(conv), categories=names, ordered=True)
 
-        def pick(prefixes: list[str]) -> pd.DataFrame | None:
-            year = lower.get("year")
-            avg  = next((lower.get(f"{p}avr") or lower.get(f"{p}avg") or lower.get(f"{p}average") for p in prefixes), None)
-            mn   = next((lower.get(f"{p}min") for p in prefixes), None)
-            mx   = next((lower.get(f"{p}max") for p in prefixes), None)
-            if year and avg and mn and mx:
-                g = df[[year, avg, mn, mx]].rename(columns={year: "Year", avg: "Average", mn: "Min", mx: "Max"}).copy()
-                for c in ("Average", "Min", "Max"):
-                    g[c] = pd.to_numeric(g[c], errors="coerce")
-                return g
+    def try_monthly(dfm: pd.DataFrame) -> pd.DataFrame | None:
+        if dfm is None or dfm.empty:
             return None
+        dfm = dfm.copy()
+        dfm.columns = [str(c).strip() for c in dfm.columns]
+        lower = [c.lower() for c in dfm.columns]
 
-        out["urban"]       = pick(["urban.", "urban_", "urban "])
-        out["agriculture"] = pick(["agr.", "agri.", "agriculture.", "agriculture_", "agr_"])
-        out["industrial"]  = pick(["ind.", "industrial.", "ind_", "industrial_"])
+        # Case A: Month in rows
+        if any(c in lower for c in ("month","months")) and any(c in lower for c in ("average","avg","mean","avr")):
+            mcol = next((c for c in dfm.columns if c.lower() in ("month","months")), None)
+            acol = next((c for c in dfm.columns if c.lower() in ("average","avg","mean","avr")), None)
+            mn   = next((c for c in dfm.columns if c.lower() in ("min","minimum","lower")), None)
+            mx   = next((c for c in dfm.columns if c.lower() in ("max","maximum","upper")), None)
+            sub = dfm[[mcol, acol] + ([mn] if mn else []) + ([mx] if mx else [])].rename(
+                columns={mcol:"Month", acol:"Average", **({mn:"Min"} if mn else {}), **({mx:"Max"} if mx else {})}
+            )
+            sub["Month"] = norm_months(sub["Month"])
+            for c in [c for c in ("Average","Min","Max") if c in sub.columns]:
+                sub[c] = pd.to_numeric(sub[c], errors="coerce")
+            return sub.sort_values("Month")
+
+        # Case B: Rows = Min/Avg/Max, Cols = Months
+        month_like = [c for c in dfm.columns if str(c).strip().upper() in
+                      ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC",
+                       "1","2","3","4","5","6","7","8","9","10","11","12"]]
+        if len(month_like) >= 12:
+            idx_avg = idx_min = idx_max = None
+            for i in range(len(dfm)):
+                tag = str(dfm.iloc[i, 0]).strip().lower()
+                if tag in ("average","avg","mean","avr"): idx_avg = i
+                elif tag in ("min","minimum","lower"):    idx_min = i
+                elif tag in ("max","maximum","upper"):    idx_max = i
+            if idx_avg is not None:
+                months = [str(c).strip().upper() for c in month_like[:12]]
+                data = {"Month": months, "Average": pd.to_numeric(dfm.loc[idx_avg, month_like].values[:12], errors="coerce")}
+                if idx_min is not None:
+                    data["Min"] = pd.to_numeric(dfm.loc[idx_min, month_like].values[:12], errors="coerce")
+                if idx_max is not None:
+                    data["Max"] = pd.to_numeric(dfm.loc[idx_max, month_like].values[:12], errors="coerce")
+                sub = pd.DataFrame(data)
+                sub["Month"] = norm_months(sub["Month"])
+                return sub.sort_values("Month")
+
+        return None
+
+    # ---------- load annual uses ----------
+    try:
+        df = pd.read_excel(uses_path)
+        df.columns = [str(c).strip() for c in df.columns]
+
+        out["urban"] = (
+            df[["Year", "Urban.min", "Urban.avr", "Urban.max"]]
+            .rename(columns={"Urban.avr": "Average", "Urban.min": "Min", "Urban.max": "Max"})
+            .loc[:, ["Year", "Average", "Min", "Max"]]
+        )
+        out["agriculture"] = (
+            df[["Year", "Agr.min", "Agr.avr", "Agr.max"]]
+            .rename(columns={"Agr.avr": "Average", "Agr.min": "Min", "Agr.max": "Max"})
+            .loc[:, ["Year", "Average", "Min", "Max"]]
+        )
+        out["industrial"] = (
+            df[["Year", "Ind.min", "Ind.avr", "Ind.max"]]
+            .rename(columns={"Ind.avr": "Average", "Ind.min": "Min", "Ind.max": "Max"})
+            .loc[:, ["Year", "Average", "Min", "Max"]]
+        )
     except Exception as e:
-        st.info(f"Water (uses) not loaded from {uses_path}: {e}")
+        st.warning(f"Water (uses) not loaded from {uses_path}: {e}")
 
-    # ---------- monthly (various layouts) ----------
+    # ---------- load monthly ----------
+    try:
+        mxls = pd.ExcelFile(month_path)
+        for s in mxls.sheet_names:
+            cand = try_monthly(mxls.parse(s))
+            if cand is not None and not cand.empty:
+                out["monthly"] = cand
+                break
+        if out["monthly"] is None:
+            st.info(f"Could not detect a monthly table in {month_path}.")
+    except Exception as e:
+        st.info(f"Water (monthly) not loaded from {month_path}: {e}")
+
+    return out
+
     def norm_months(x: pd.Series) -> pd.Series:
         names = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"]
         s = x.astype(str).str.strip().str.upper()
@@ -795,7 +869,25 @@ with tab10:
 
         # Special rule: BAU shows ONE number (KPI), not the 8 charts
         if scen == "BAU":
-            st.metric(label="BAU – Total Emissions", value="99.68 MtCO₂e")
+            import plotly.graph_objects as go
+
+            fig_bau = go.Figure()
+
+            fig_bau.add_trace(go.Indicator(
+                mode="number",
+                value=99.68,  # <<< replace with dynamic value if available
+                number={"suffix": " MtCO₂e", "font": {"size": 80}},  # BIG FONT
+                title={"text": "BAU – Total Emissions", "font": {"size": 24}},
+            ))
+
+            fig_bau.update_layout(
+                width=600,
+                height=400,
+                margin=dict(l=20, r=20, t=60, b=20),
+            )
+
+            st.plotly_chart(fig_bau, use_container_width=False, key="bau_total_emissions")
+
         else:
             col1, col2 = st.columns(2)
             with col1:
@@ -832,7 +924,6 @@ with tab10:
                 fig_penalty = render_ships_ets_penalty(base_df, y_label="Costs (M€)")
                 st.plotly_chart(fig_penalty, use_container_width=False, key="ships_ets_penalty")
 
-
 with tab11:
     scen = (selected_scenario or "").strip().upper()
 
@@ -862,7 +953,7 @@ with tab11:
             max_col_candidates=["Max"],
             y_label="Water Requirements [hm³]",
         )
-        st.plotly_chart(fig_u, use_container_width=False)
+        st.plotly_chart(fig_u, use_container_width=True, key="urban_water")
 
     with wcol2:
         df_a = water.get("agriculture")
@@ -874,7 +965,7 @@ with tab11:
             max_col_candidates=["Max"],
             y_label="Water Requirements [hm³]",
         )
-        st.plotly_chart(fig_a, use_container_width=False)
+        st.plotly_chart(fig_a, use_container_width=True, key="agri_water")
 
     # --- Industrial | Monthly ---
     wcol3, wcol4 = st.columns(2)
@@ -889,7 +980,7 @@ with tab11:
             max_col_candidates=["Max"],
             y_label="Water Requirements [hm³]",
         )
-        st.plotly_chart(fig_i, use_container_width=False)
+        st.plotly_chart(fig_i, use_container_width=True, key="ind_water")
 
     with wcol4:
         df_m = water.get("monthly")
@@ -902,7 +993,7 @@ with tab11:
             max_col_candidates=["Max"],
             y_label="Water Requirements [hm³]",
         )
-        st.plotly_chart(fig_m, use_container_width=False)
+        st.plotly_chart(fig_m, use_container_width=True, key="monthly_water")
 
 with tab_sdsn:
     st.header("About SDSN Greece")

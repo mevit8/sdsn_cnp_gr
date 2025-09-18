@@ -10,7 +10,7 @@ TAB_TITLES = [
     "⚡ Energy–Emissions",
     "🌿 Biofuels",
     "🚢 Shipping",
-    "💧 Water Requirements",
+    "💧 Land & Water Requirements",
     "🌍 SDSN Pathway",
 ]
 

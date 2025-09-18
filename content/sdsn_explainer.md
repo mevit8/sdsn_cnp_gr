@@ -9,7 +9,7 @@ We used these criteria (GHG emissions, Cost of decarbonization measures, Energy 
 In an indicative run, we (as modellers) weighted these four criteria, and the results look like this:
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/mevit8/sdsn_cnp_gr/main/content/boxplots.png" width="600">
+  <img src="https://raw.githubusercontent.com/mevit8/sdsn_cnp_gr/main/content/boxplots.png" width="400">
 </p>
 
 We then simulated all the 30 decarbonization measures included in the Greek National Energy and Climate Plan (NECP). A Fuzzy TOPSIS was then applied to evaluate their performance to each criterion, accounting thus for data, modelling and implementation time uncertainties.
@@ -17,7 +17,7 @@ We then simulated all the 30 decarbonization measures included in the Greek Nati
 This ranking of the ‘best – performing’ alternatives resulted in a sub-set of 18 decarbonization measures (out of 30), so that their priority application can achieve the same decarbonization level with the NECP.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/mevit8/sdsn_cnp_gr/main/content/P20diagrams.jpg" width="600">
+  <img src="https://raw.githubusercontent.com/mevit8/sdsn_cnp_gr/main/content/P20diagrams.jpg" width="800">
 </p>
 
 The results indicate that this SDSN decarbozation pathway achieves 

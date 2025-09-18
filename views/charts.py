@@ -227,6 +227,14 @@ def render_sankey(
 # -----------------------------
 # Ships Charts (refactored)
 # -----------------------------
+SHIP_TYPE_LABELS = {
+    "C": "C: Container",
+    "T": "T: Tanker",
+    "B": "B: Bulk",
+    "G": "G: Cargo",
+    "O": "O: Other",
+}
+
 def render_ships_stock(df_base: pd.DataFrame, y_label: str = "Number of Stock Ships"):
     if df_base.empty:
         return px.bar(title="Stock Ships — no data")
@@ -241,7 +249,10 @@ def render_ships_stock(df_base: pd.DataFrame, y_label: str = "Number of Stock Sh
         .assign(type=lambda x: x["col"].str.replace("^Stock_Ships_", "", regex=True))
     )
 
-    pref = ["C", "T", "B", "G", "O"]
+    # <<< ADDED: replace short codes with descriptive labels
+    d_long["type"] = d_long["type"].replace(SHIP_TYPE_LABELS)
+
+    pref = ["C: Container", "T: Tanker", "B: Bulk", "G: Cargo", "O: Other"]  # <<< UPDATED
     seen = list(dict.fromkeys([t for t in pref if t in d_long["type"].unique()]))
     rest = [t for t in sorted(d_long["type"].unique()) if t not in seen]
     order = seen + rest
@@ -263,32 +274,24 @@ def render_ships_stock(df_base: pd.DataFrame, y_label: str = "Number of Stock Sh
     )
     return fig
 
-
 def render_ships_new(df_base: pd.DataFrame, y_label: str = "Number of New Ships"):
     if df_base.empty:
         return px.bar(title="New Ships — no data")
 
-    cols = [c for c in df_base.columns if c.lower().startswith("new_ships_")]
-    if not cols:
-        cols = [c for c in df_base.columns if c.lower().startswith("new_")]
-
-    if "Year" not in df_base.columns or not cols:
+    new_cols = [c for c in df_base.columns if c.startswith("New_Ships_")]
+    if "Year" not in df_base.columns or not new_cols:
         return px.bar(title="New Ships — expected 'Year' and 'New_Ships_*' columns")
 
     d_long = (
-        df_base[["Year"] + cols]
+        df_base[["Year"] + new_cols]
         .melt(id_vars="Year", var_name="col", value_name="value")
+        .assign(type=lambda x: x["col"].str.replace("^New_Ships_", "", regex=True))
     )
-    def _extract_type(col: str) -> str:
-        cl = col.lower()
-        if cl.startswith("new_ships_"):
-            return col.split("_", 2)[-1]
-        if cl.startswith("new_"):
-            return col.split("_", 1)[-1]
-        return col
-    d_long["type"] = d_long["col"].map(_extract_type)
 
-    pref = ["C", "T", "B", "G", "O"]
+    # <<< ADDED: replace short codes with descriptive labels
+    d_long["type"] = d_long["type"].replace(SHIP_TYPE_LABELS)
+
+    pref = ["C: Container", "T: Tanker", "B: Bulk", "G: Cargo", "O: Other"]  # <<< UPDATED
     seen = list(dict.fromkeys([t for t in pref if t in d_long["type"].unique()]))
     rest = [t for t in sorted(d_long["type"].unique()) if t not in seen]
     order = seen + rest
@@ -309,7 +312,6 @@ def render_ships_new(df_base: pd.DataFrame, y_label: str = "Number of New Ships"
         legend_title=None,
     )
     return fig
-
 
 def render_ships_investment_cost(df_base: pd.DataFrame, y_label: str = "Costs (M€)"):
     if df_base.empty or "Year" not in df_base.columns or "Investment_Cost" not in df_base.columns:
@@ -515,25 +517,35 @@ def render_water_band(
     avg_col_candidates = avg_col_candidates or ["Average", f"{title} Average", f"{title} Avg", "Avg"]
     min_col_candidates = min_col_candidates or ["Min", f"{title} Min", "Minimum"]
     max_col_candidates = max_col_candidates or ["Max", f"{title} Max", "Maximum"]
+
     if df.empty:
-        fig = go.Figure(); fig.update_layout(title=f"{title} — no data"); return fig
+        fig = go.Figure()
+        fig.update_layout(title=f"{title} — no data")
+        return fig
+
     ycol = _resolve_ci(df, [year_col, "Year"])
     ac   = _resolve_ci(df, avg_col_candidates)
     mic  = _resolve_ci(df, min_col_candidates)
     mac  = _resolve_ci(df, max_col_candidates)
+
     if not (ycol and ac and mic and mac):
-        fig = go.Figure(); fig.update_layout(title=f"{title} — missing required cols"); return fig
+        fig = go.Figure()
+        fig.update_layout(title=f"{title} — missing required cols")
+        return fig
+
     d = df[[ycol, ac, mic, mac]].rename(columns={ycol:"Year", ac:"Avg", mic:"Min", mac:"Max"}).copy()
     for c in ("Avg","Min","Max"):
         d[c] = pd.to_numeric(d[c], errors="coerce")
     d = d.sort_values("Year")
+
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=d["Year"], y=d["Min"], mode="lines", line=dict(width=0), hoverinfo="skip", showlegend=False))
+    fig.add_trace(go.Scatter(x=d["Year"], y=d["Min"], mode="lines", line=dict(width=0),
+                             hoverinfo="skip", showlegend=False))
     fig.add_trace(go.Scatter(x=d["Year"], y=d["Max"], mode="lines", line=dict(width=0),
                              fill="tonexty", fillcolor="rgba(59,130,246,0.20)", name="Range (Min–Max)"))
     fig.add_trace(go.Scatter(x=d["Year"], y=d["Avg"], mode="lines+markers", name="Average", line=dict(width=2)))
+
     fig.update_layout(title=title, xaxis_title="", yaxis_title=y_label)
-    st.plotly_chart(fig, use_container_width=True, key=key or f"{title}_water_band")
     return fig
 
 
@@ -551,27 +563,39 @@ def render_water_monthly_band(
     avg_col_candidates   = avg_col_candidates or ["Average", "Avg", f"{title} Average"]
     min_col_candidates   = min_col_candidates or ["Min", "Minimum", f"{title} Min"]
     max_col_candidates   = max_col_candidates or ["Max", "Maximum", f"{title} Max"]
+
     if df is None or df.empty:
-        fig = go.Figure(); fig.update_layout(title=f"{title} — no data"); return fig
+        fig = go.Figure()
+        fig.update_layout(title=f"{title} — no data")
+        return fig
+
     mcol = _resolve_ci(df, month_col_candidates)
     ac   = _resolve_ci(df, avg_col_candidates)
     mic  = _resolve_ci(df, min_col_candidates)
     mac  = _resolve_ci(df, max_col_candidates)
+
     if not (mcol and ac and mic and mac):
-        fig = go.Figure(); fig.update_layout(title=f"{title} — missing required cols"); return fig
+        fig = go.Figure()
+        fig.update_layout(title=f"{title} — missing required cols")
+        return fig
+
     d = df[[mcol, ac, mic, mac]].rename(columns={mcol:"Month", ac:"Avg", mic:"Min", mac:"Max"}).copy()
     for c in ("Avg","Min","Max"):
         d[c] = pd.to_numeric(d[c], errors="coerce")
+
     month_order = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"]
     if d["Month"].dtype == object:
         d["Month"] = d["Month"].astype(str).str.strip().str.upper()
         d["Month"] = pd.Categorical(d["Month"], categories=month_order, ordered=True)
     d = d.sort_values("Month")
+
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=d["Month"], y=d["Min"], mode="lines", line=dict(width=0), hoverinfo="skip", showlegend=False))
+    fig.add_trace(go.Scatter(x=d["Month"], y=d["Min"], mode="lines", line=dict(width=0),
+                             hoverinfo="skip", showlegend=False))
     fig.add_trace(go.Scatter(x=d["Month"], y=d["Max"], mode="lines", line=dict(width=0),
                              fill="tonexty", fillcolor="rgba(59,130,246,0.20)", name="Range (Min–Max)"))
     fig.add_trace(go.Scatter(x=d["Month"], y=d["Avg"], mode="lines+markers", name="Average", line=dict(width=2)))
+
     fig.update_layout(title=title, xaxis_title="Months", yaxis_title=y_label)
-    st.plotly_chart(fig, use_container_width=True, key=key or f"{title}_water_monthly")
     return fig
+
