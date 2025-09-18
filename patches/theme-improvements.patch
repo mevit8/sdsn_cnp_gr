@@ -1,0 +1,113 @@
+diff --git a/config/theme.py b/config/theme.py
+index 1234567..89abcde 100644
+--- a/config/theme.py
++++ b/config/theme.py
+@@
+ # Global chart dimensions
+-CHART_WIDTH = 800
+-CHART_HEIGHT = 500
++CHART_WIDTH = 900
++CHART_HEIGHT = 550
++
++# Global font
++FONT_FAMILY = "Arial, Helvetica, sans-serif"
++FONT_COLOR = "#111111"
++
++# Fuel color palette
++FUEL_COLORS = {
++    # Fossil fuels
++    "Oil": "#000000",           # Black
++    "Crude Oil": "#000000",
++    "Coal": "#4b2e2e",          # Dark brown
++    "Lignite": "#5a3d2b",
++    "Natural Gas": "#b8860b",   # Goldenrod
++    "Petroleum": "#a0522d",
++    "Refined Products": "#cd853f",
++
++    # Renewables
++    "Solar": "#fbbf24",         # Amber
++    "Wind": "#3b82f6",          # Blue
++    "Hydro": "#0ea5e9",         # Cyan
++    "Biomass": "#16a34a",       # Green
++    "Geothermal": "#9333ea",    # Purple
++    "Hydrogen": "#a855f7",
++}
++
++# Default color palette fallback
++DEFAULT_PALETTE = [
++    "#2563eb", "#16a34a", "#f59e0b", "#dc2626",
++    "#9333ea", "#0ea5e9", "#fbbf24", "#374151"
++]
+diff --git a/views/charts.py b/views/charts.py
+index 1234567..89abcdf 100644
+--- a/views/charts.py
++++ b/views/charts.py
+@@
+ def render_bar_chart(
+     df,
+     x,
+     y,
+     color,
+     title,
+     x_category_order,
+-    colors=None,
++    colors=None,
+     tick_every_years: Optional[int] = None,
+     start_year: Optional[int] = None,
+     plot: bool = True,
+     width: Optional[int] = None,
+     height: Optional[int] = None,
+ ):
+@@
+-    fig.update_layout(
+-        width=width or getattr(theme, "CHART_WIDTH", 800),
+-        height=height or getattr(theme, "CHART_HEIGHT", 500),
+-    )
++    fig.update_layout(
++        width=width or getattr(theme, "CHART_WIDTH", 900),
++        height=height or getattr(theme, "CHART_HEIGHT", 550),
++        font=dict(family=theme.FONT_FAMILY, color=theme.FONT_COLOR, size=14),
++        margin=dict(t=60, r=40, b=40, l=60),
++        legend=dict(
++            font=dict(size=12),
++            orientation="h",
++            yanchor="bottom",
++            y=-0.25,
++            xanchor="center",
++            x=0.5
++        ),
++    )
+ 
+     if plot:
+-        st.plotly_chart(fig, use_container_width=False)  # key change: disable full width
++        st.plotly_chart(fig, use_container_width=False)
+ 
+     return fig
+diff --git a/static/style.css b/static/style.css
+index 1234567..89abce0 100644
+--- a/static/style.css
++++ b/static/style.css
+@@
+-/* Limit default chart width and center it */
+-.stPlotlyChart {
+-    max-width: 800px;  /* adjust as you like */
+-    margin-left: auto;
+-    margin-right: auto;
+-}
++/* Limit chart width but keep left alignment */
++.stPlotlyChart {
++    max-width: 900px;
++}
++
++/* Improve sidebar readability */
++.css-1d391kg, .stSidebar {
++    font-family: Arial, Helvetica, sans-serif;
++    font-size: 15px;
++}
++
++/* Titles */
++h1, h2, h3 {
++    font-family: Arial, Helvetica, sans-serif;
++    font-weight: 600;
++    color: #111111;
++}
