@@ -6,6 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from config import theme
 import pandas as pd
+from pathlib import Path
 
 ColorSpec = Union[Dict[str, str], List[str], None]
 # -----------------------------
@@ -599,3 +600,220 @@ def render_water_monthly_band(
     fig.update_layout(title=title, xaxis_title="Months", yaxis_title=y_label)
     return fig
 
+# ------------------------------------------------------------
+# Interactive Scenarios
+# ------------------------------------------------------------
+import re
+
+@st.cache_data(show_spinner=False)
+def load_interactive_data(
+    path: str = "data/Fable_results_combos.xlsx",
+    sheet_name: str = "Custom combinations from user"
+) -> pd.DataFrame:
+    """Parse the interactive Excel file into tidy form.
+    Detects blocks like 'Option A-A-A (BAU)' and assigns metadata columns."""
+    df_raw = pd.read_excel(path, sheet_name=sheet_name, header=None)
+
+    # Find rows that mark the start of a scenario block
+    option_rows = df_raw.index[
+        df_raw.iloc[:, 0].astype(str).str.contains("Option", na=False)
+    ].tolist()
+    if not option_rows:
+        st.error("No 'Option' labels found in the sheet.")
+        return pd.DataFrame()
+
+    blocks = []
+    for i, start_row in enumerate(option_rows):
+        label = str(df_raw.iloc[start_row, 0]).strip()
+
+        # Find where this block ends (next Option row or EOF)
+        next_row = option_rows[i + 1] if i + 1 < len(option_rows) else len(df_raw)
+
+        # Header is immediately below "Option ..." line
+        header_row = start_row + 1
+        if header_row >= len(df_raw):
+            continue  # avoid out-of-bounds
+
+        # Use that row as headers
+        headers = df_raw.iloc[header_row].tolist()
+
+        # Data starts right after the header row
+        data_start = header_row + 1
+        block = df_raw.iloc[data_start:next_row].copy()
+
+        # Drop completely empty rows
+        block = block.dropna(how="all")
+        if block.empty:
+            continue
+
+        # Assign the header row as columns
+        block.columns = [str(h).strip() for h in headers]
+        block["ScenarioOption"] = label
+        blocks.append(block)
+
+    if not blocks:
+        st.warning("No scenario blocks parsed.")
+        return pd.DataFrame()
+
+    df = pd.concat(blocks, ignore_index=True)
+
+    # Try to detect year column
+    year_col = _resolve_ci(df, ["Year"])
+    if year_col:
+        df["Year"] = pd.to_numeric(df[year_col], errors="coerce")
+    else:
+        df["Year"] = None
+
+    # Extract identifiers (A/B/C)
+    pat = r"Option\s*([A-C])\-([A-C])\-([A-C])"
+    df[["PopOpt", "DietOpt", "ProdOpt"]] = df["ScenarioOption"].str.extract(pat)
+    df["ScenarioOption"] = df["ScenarioOption"].str.replace(r"Option\s*", "", regex=True)
+
+    # Normalize and convert numeric columns
+    df.columns = [str(c).strip() for c in df.columns]
+    for c in df.columns:
+        if c not in ["ScenarioOption", "PopOpt", "DietOpt", "ProdOpt", "Year"]:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    return df
+
+
+def render_interactive_controls(tab_name: str):
+    st.subheader(f"{tab_name} – Interactive Scenario Builder")
+
+    # --- (1) Expander description ---
+    with st.expander("ℹ️ About the FABLE Calculator"):
+        st.markdown("""
+        **FABLE Calculator** uses CORINE national land cover baseline, FAOSTAT crop yields (historical & trend),
+        livestock numbers, and food demand projections, at an annual time-step, to estimate food-land system pathways to 2050.
+
+        Its large scenario explorer leverages **national population and GDP projections** based on
+        the *Shared Socioeconomic Pathways (SSPs)*.  
+        Dietary choices imply uptake in ingredients/products defined by **SSPs**, **EAT-Lancet Diet**, or
+        **custom scenarios**, while default rates of **crop and livestock productivity** (low, medium, high)
+        can be adjusted.
+
+        The FABLE Calculator offers a portfolio of **more than 1.5 billion pathways**, reflecting variations in climate,
+        economics, agricultural policy, regulation, and demographics.
+
+        Here, you can explore the **key demand-side drivers** (Population, Diet, Productivity) that shape these pathways.
+        """, unsafe_allow_html=True)
+
+    # --- (2) Dropdown controls ---
+    col1, col2, col3 = st.columns(3)
+    
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        pop = st.selectbox(
+            "Population & GDP projection",
+            options=["A", "B", "C"],
+            format_func=lambda x: {"A": "SSP2 (BAU)", "B": "SSP1 (NCNC)", "C": "SSP5"}[x],
+            help=(
+                "Population and GDP projections to 2050:\n\n"
+                "**Option A (SSP2 – BAU)**: Moderate population decline (~24% by 2100), GDP growth 1.9–2.2%.\n\n"
+                "**Option B (SSP1 – NCNC)**: Sustainability-oriented, smaller decline (~14%) and higher GDP growth (2.0–2.5%).\n\n"
+                "**Option C (SSP5)**: Rapid economic growth, strong tech progress, decline up to 40% by 2100."
+            ),
+        )
+
+    with col2:
+        diet = st.selectbox(
+            "Dietary choice",
+            options=["A", "B", "C"],
+            format_func=lambda x: {"A": "Baseline (BAU)", "B": "EAT-Lancet (NCNC)", "C": "FatDiet"}[x],
+            help=(
+                "Dietary choices affecting agricultural land:\n\n"
+                "**Option A (Baseline)**: FAO baseline, 2010–2020 diet, limited land expansion.\n\n"
+                "**Option B (EAT-Lancet)**: Healthier diet, limited land expansion, low deforestation.\n\n"
+                "**Option C (FatDiet)**: High-fat, sugar- and meat-rich diet, greater land expansion potential."
+            ),
+        )
+
+    with col3:
+        prod = st.selectbox(
+            "Crop & livestock productivity",
+            options=["A", "B", "C"],
+            format_func=lambda x: {"A": "Baseline", "B": "High growth", "C": "Low growth"}[x],
+            help=(
+                "Crop and livestock productivity assumptions:\n\n"
+                "**Option A (Baseline)**: No change from 2010–2020 levels.\n\n"
+                "**Option B (High growth)**: Closes ~50–80% of yield gaps (FAOSTAT).\n\n"
+                "**Option C (Low growth)**: Closes ~30–40% of yield gaps."
+            ),
+        )
+
+
+
+    # --- (3) Chart rendering (must come AFTER dropdowns) ---
+    render_interactive_charts(tab_name, pop, diet, prod)
+
+    # --- (4) Sensitivity section (optional) ---
+    # --- Sensitivity section ---
+    st.markdown("---")
+    st.subheader("📈 Sensitivity Summary")
+
+    sensitivity_image_path = Path("content/fable_sensitivity.png")
+
+    if sensitivity_image_path.exists():
+        with st.expander("📊 Show sensitivity summary figure", expanded=False):
+            st.image(str(sensitivity_image_path), width=600)
+            st.caption("Relative sensitivity of key indicators under different scenario combinations.")
+    else:
+        st.info("Sensitivity summary image not found.")
+
+
+def render_interactive_charts(tab_name: str, pop: str, diet: str, prod: str):
+    """Filter interactive Excel data and render charts accordingly."""
+    df_all = load_interactive_data()
+    if df_all.empty:
+        st.warning("Interactive data could not be loaded or parsed.")
+        return
+
+    mask = (
+        (df_all["PopOpt"] == pop)
+        & (df_all["DietOpt"] == diet)
+        & (df_all["ProdOpt"] == prod)
+    )
+    df = df_all.loc[mask].copy()
+    if df.empty:
+        st.info(f"No data found for combination {pop}-{diet}-{prod}.")
+        return
+
+    st.markdown(f"### Results for Option {pop}-{diet}-{prod}")
+    st.caption("Below are indicative charts based on your selected combination.")
+
+    # Detect relevant column groups
+    ghg_cols = [c for c in df.columns if "GHG" in c]
+    cost_cols = [c for c in df.columns if "Cost" in c]
+    land_cols = [c for c in df.columns if "Land" in c or "Cropland" in c or "Forest" in c or "Pasture" in c]
+
+    # ---- Emissions ----
+    if ghg_cols:
+        ghg_long = df.melt(id_vars=["Year"], value_vars=ghg_cols, var_name="Component", value_name="Value")
+        render_line_chart(
+            ghg_long, "Year", "Value", "Component",
+            title="Greenhouse gas emissions",
+            y_label="Mt CO₂e",
+            key=f"ghg_interactive_{pop}{diet}{prod}"
+        )
+
+    # ---- Costs ----
+    if cost_cols:
+        cost_long = df.melt(id_vars=["Year"], value_vars=cost_cols, var_name="Component", value_name="Value")
+        render_bar_chart(
+            cost_long, "Year", "Value", "Component",
+            title="Agricultural production costs",
+            y_label="M€",
+            key=f"costs_interactive_{pop}{diet}{prod}"
+        )
+
+    # ---- Land Use ----
+    if land_cols:
+        land_long = df.melt(id_vars=["Year"], value_vars=land_cols, var_name="Component", value_name="Value")
+        render_line_chart(
+            land_long, "Year", "Value", "Component",
+            title="Land use composition",
+            y_label="1000 km²",
+            key=f"land_interactive_{pop}{diet}{prod}"
+        )

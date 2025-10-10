@@ -374,12 +374,19 @@ df_energy_balance = load_energy_balance("data/LEAP_Energy_Balance.xlsx")
 df_biofuels = load_biofuels_simple("data/LEAP_Biofuels.xlsx")
 
 
+# Sidebar
+st.sidebar.title("Scenario selection")
 
-# Shared scenario selector
-scenarios = sorted(set(df_costs["Scenario"]).intersection(
-    df_emissions["Scenario"], df_land["Scenario"], df_energy["Scenario"]
-))
+# Define scenarios here BEFORE selectbox
+scenarios = ["BAU", "NCNC", "Interactive"]
+
+# Scenario dropdown
 selected_scenario = st.sidebar.selectbox("🎯 Select Scenario", scenarios)
+
+# (Optional) keep your old sidebar info/help below
+st.sidebar.markdown("Select scenario type to explore results.")
+
+
 
 # Explain to users what the dropdown does
 st.sidebar.markdown(
@@ -489,83 +496,85 @@ with tab_overview:
         st.markdown(intro_path.read_text(), unsafe_allow_html=True)
     else:
         st.warning("⚠️ content/introduction.md not found.")
-
 with tab_food:
-    scen = (selected_scenario or "").strip().upper()
-
-    # Scenario-specific explainer first
-    scen_file = BASE_DIR / "content" / f"food_land_explainer_{scen}.md"
-    default_file = BASE_DIR / "content" / "food_land_explainer.md"
-
-    if scen_file.exists():
-        text = scen_file.read_text(encoding="utf-8")
-        if text.strip():
-            st.markdown(text, unsafe_allow_html=True)
-        else:
-            st.warning(f"{scen_file.name} is empty.")
-    elif default_file.exists():
-        text = default_file.read_text(encoding="utf-8")
-        if text.strip():
-            st.markdown(text, unsafe_allow_html=True)
-        else:
-            st.warning("food_land_explainer.md is empty.")
+    if selected_scenario == "Interactive":
+        from views.charts import render_interactive_controls
+        render_interactive_controls("Food–Land")
     else:
-        st.warning(f"No food explainer found for scenario {scen} or default.")
+        scen = (selected_scenario or "").strip().upper()
+        # Scenario-specific explainer first
+        scen_file = BASE_DIR / "content" / f"food_land_explainer_{scen}.md"
+        default_file = BASE_DIR / "content" / "food_land_explainer.md"
 
-    # --- Layout for charts ---
-    col1, col2 = st.columns(2)
+        if scen_file.exists():
+            text = scen_file.read_text(encoding="utf-8")
+            if text.strip():
+                st.markdown(text, unsafe_allow_html=True)
+            else:
+                st.warning(f"{scen_file.name} is empty.")
+        elif default_file.exists():
+            text = default_file.read_text(encoding="utf-8")
+            if text.strip():
+                st.markdown(text, unsafe_allow_html=True)
+            else:
+                st.warning("food_land_explainer.md is empty.")
+        else:
+            st.warning(f"No food explainer found for scenario {scen} or default.")
 
-    # --- Emissions (Mt CO₂e) ---
-    with col1:
-        cols = ["CropCO2e", "LiveCO2e", "LandCO2"]
-        melted, years = prepare_stacked_data(df_emissions, selected_scenario, "Year", cols)
+        # --- Layout for charts ---
+        col1, col2 = st.columns(2)
 
-        total_df = df_emissions[df_emissions["Scenario"] == selected_scenario][["Year", "FAOTotalCO2e"]].copy()
-        total_df = total_df.rename(columns={"FAOTotalCO2e": "Value"})
-        total_df["Component"] = "Total CO₂e"
+        # --- Emissions (Mt CO₂e) ---
+        with col1:
+            cols = ["CropCO2e", "LiveCO2e", "LandCO2"]
+            melted, years = prepare_stacked_data(df_emissions, selected_scenario, "Year", cols)
 
-        render_grouped_bar_and_line(
-            prod_df=melted,
-            demand_df=total_df,
-            x_col="Year",
-            y_col="Value",
-            category_col="Component",
-            title="Production-based agricultural emissions",
-            colors=theme.EMISSIONS_COLORS,
-            y_label="Mt CO₂e",
-            key="food_emissions"
-        )
+            total_df = df_emissions[df_emissions["Scenario"] == selected_scenario][["Year", "FAOTotalCO2e"]].copy()
+            total_df = total_df.rename(columns={"FAOTotalCO2e": "Value"})
+            total_df["Component"] = "Total CO₂e"
 
-    # --- Costs (M€) ---
-    with col2:
-        cols = ["FertilizerCost", "LabourCost", "MachineryRunningCost", "DieselCost", "PesticideCost"]
-        melted, years = prepare_stacked_data(df_costs, selected_scenario, "Year", cols)
-        render_bar_chart(
-            melted,
-            "Year", "Value", "Component",
-            "Agricultural production cost",
-            [str(y) for y in years],
-            y_label="M€",
-            key="food_costs"
-        )
+            render_grouped_bar_and_line(
+                prod_df=melted,
+                demand_df=total_df,
+                x_col="Year",
+                y_col="Value",
+                category_col="Component",
+                title="Production-based agricultural emissions",
+                colors=theme.EMISSIONS_COLORS,
+                y_label="Mt CO₂e",
+                key="food_emissions"
+            )
 
-    # --- Land use (1000 km²) ---
-    col3, = st.columns(1)
-    with col3:
-        cols = ["FAOCropland", "FAOHarvArea", "FAOPasture", "FAOUrban", "FAOForest", "FAOOtherLand"]
-        df_filtered = df_land[df_land["Scenario"] == selected_scenario].copy()
-        df_filtered[cols] = df_filtered[cols].fillna(0)
-        melted = df_filtered.melt(
-            id_vars=["Year"], value_vars=cols,
-            var_name="Component", value_name="Value"
-        )
-        render_line_chart(
-            melted,
-            "Year", "Value", "Component",
-            "Land uses evolution",
-            y_label="1000 km²",
-            key="food_landuse"
-        )
+        # --- Costs (M€) ---
+        with col2:
+            cols = ["FertilizerCost", "LabourCost", "MachineryRunningCost", "DieselCost", "PesticideCost"]
+            melted, years = prepare_stacked_data(df_costs, selected_scenario, "Year", cols)
+            render_bar_chart(
+                melted,
+                "Year", "Value", "Component",
+                "Agricultural production cost",
+                [str(y) for y in years],
+                y_label="M€",
+                key="food_costs"
+            )
+
+        # --- Land use (1000 km²) ---
+        col3, = st.columns(1)
+        with col3:
+            cols = ["FAOCropland", "FAOHarvArea", "FAOPasture", "FAOUrban", "FAOForest", "FAOOtherLand"]
+            df_filtered = df_land[df_land["Scenario"] == selected_scenario].copy()
+            df_filtered[cols] = df_filtered[cols].fillna(0)
+            melted = df_filtered.melt(
+                id_vars=["Year"], value_vars=cols,
+                var_name="Component", value_name="Value"
+            )
+            render_line_chart(
+                melted,
+                "Year", "Value", "Component",
+                "Land uses evolution",
+                y_label="1000 km²",
+                key="food_landuse"
+            )
 
 
 with tab_energy:
