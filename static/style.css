@@ -48,3 +48,22 @@ section[data-testid="stSidebar"] {
     color: #004C97 !important;   /* SDSN blue */
     font-weight: 600;
 }
+
+/* === Scenario selector styling === */
+.scenario-active {
+  background-color: #e0f2fe; /* light blue highlight */
+  border-left: 4px solid #2563eb; /* SDSN blue accent */
+  padding: 0.4rem 0.6rem;
+  margin: 0.6rem 0;
+  border-radius: 0.3rem;
+  font-size: 0.9rem;
+  color: #111827;
+}
+
+/* Keep buttons compact and prevent wrapping */
+section[data-testid="stSidebar"] button {
+  font-size: 0.85rem;
+  white-space: nowrap;
+  padding: 0.3rem 0.4rem;
+}
+

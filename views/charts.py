@@ -764,7 +764,7 @@ def render_interactive_controls(tab_name: str):
 
 
 def render_interactive_charts(tab_name: str, pop: str, diet: str, prod: str):
-    """Filter interactive Excel data and render charts accordingly."""
+    """Filter interactive Excel data and render charts matching BAU/NCNC layout & styling."""
     df_all = load_interactive_data()
     if df_all.empty:
         st.warning("Interactive data could not be loaded or parsed.")
@@ -783,37 +783,72 @@ def render_interactive_charts(tab_name: str, pop: str, diet: str, prod: str):
     st.markdown(f"### Results for Option {pop}-{diet}-{prod}")
     st.caption("Below are indicative charts based on your selected combination.")
 
-    # Detect relevant column groups
+    # --- Detect relevant column groups ---
     ghg_cols = [c for c in df.columns if "GHG" in c]
     cost_cols = [c for c in df.columns if "Cost" in c]
-    land_cols = [c for c in df.columns if "Land" in c or "Cropland" in c or "Forest" in c or "Pasture" in c]
+    land_cols = [c for c in df.columns if any(x in c for x in ["Land", "Cropland", "Forest", "Pasture", "Area"])]
 
-    # ---- Emissions ----
-    if ghg_cols:
-        ghg_long = df.melt(id_vars=["Year"], value_vars=ghg_cols, var_name="Component", value_name="Value")
-        render_line_chart(
-            ghg_long, "Year", "Value", "Component",
-            title="Greenhouse gas emissions",
-            y_label="Mt CO₂e",
-            key=f"ghg_interactive_{pop}{diet}{prod}"
-        )
+    # --- Layout: two charts on top (side by side) ---
+    col1, col2 = st.columns(2)
 
-    # ---- Costs ----
-    if cost_cols:
-        cost_long = df.melt(id_vars=["Year"], value_vars=cost_cols, var_name="Component", value_name="Value")
-        render_bar_chart(
-            cost_long, "Year", "Value", "Component",
-            title="Agricultural production costs",
-            y_label="M€",
-            key=f"costs_interactive_{pop}{diet}{prod}"
-        )
+    # --- Emissions: grouped bar + line (left) ---
+    with col1:
+        if ghg_cols:
+            ghg_long = df.melt(id_vars=["Year"], value_vars=ghg_cols, var_name="Component", value_name="Value")
 
-    # ---- Land Use ----
-    if land_cols:
-        land_long = df.melt(id_vars=["Year"], value_vars=land_cols, var_name="Component", value_name="Value")
-        render_line_chart(
-            land_long, "Year", "Value", "Component",
-            title="Land use composition",
-            y_label="1000 km²",
-            key=f"land_interactive_{pop}{diet}{prod}"
-        )
+            # Identify total column if present
+            total_candidates = [c for c in ghg_cols if "Total" in c]
+            if total_candidates:
+                total_df = df[["Year", total_candidates[0]]].rename(columns={total_candidates[0]: "Value"})
+                total_df["Component"] = "Total CO₂e"
+            else:
+                total_df = pd.DataFrame()
+
+            render_grouped_bar_and_line(
+                prod_df=ghg_long,
+                demand_df=total_df if not total_df.empty else None,
+                x_col="Year",
+                y_col="Value",
+                category_col="Component",
+                title="Production-based agricultural emissions",
+                y_label="Mt CO₂e",
+                colors=theme.EMISSIONS_COLORS,
+                key=f"ghg_interactive_{pop}{diet}{prod}"
+            )
+
+ # --- Costs: stacked bar (right) ---
+    with col2:
+        if cost_cols:
+            cost_long = df.melt(
+                id_vars=["Year"],
+                value_vars=cost_cols,
+                var_name="Component",
+                value_name="Value"
+            )
+
+            # ✅ No renaming, no color override
+            # Use same behavior as BAU/NCNC — let render_bar_chart() pick theme.COST_COLORS internally
+            render_bar_chart(
+                cost_long,
+                "Year", "Value", "Component",
+                "Agricultural production cost",
+                [str(y) for y in sorted(df["Year"].unique())],
+                y_label="M€",
+                key=f"costs_interactive_{pop}{diet}{prod}"
+            )
+
+    # --- Land Use: line chart (below full width) ---
+    col3, = st.columns(1)
+    with col3:
+        if land_cols:
+            land_long = df.melt(id_vars=["Year"], value_vars=land_cols, var_name="Component", value_name="Value")
+            render_line_chart(
+                land_long,
+                x_col="Year", y_col="Value", category_col="Component",
+                title="Land uses evolution",
+                y_label="1000 km²",
+                colors=theme.LAND_COLORS if hasattr(theme, "LAND_COLORS") else None,
+                key=f"land_interactive_{pop}{diet}{prod}"
+            )
+
+

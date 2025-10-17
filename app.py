@@ -375,32 +375,46 @@ df_biofuels = load_biofuels_simple("data/LEAP_Biofuels.xlsx")
 
 
 # Sidebar
-st.sidebar.title("Scenario selection")
+st.sidebar.title("🎯 Scenario Selection")
 
-# Define scenarios here BEFORE selectbox
-scenarios = ["BAU", "NCNC", "Interactive"]
+# Define scenarios
+scenarios = ["BAU", "NCNC", "Interactive"]  # keep internal mapping for consistency
 
-# Scenario dropdown
-selected_scenario = st.sidebar.selectbox("🎯 Select Scenario", scenarios)
+# Initialize state
+if "selected_scenario" not in st.session_state:
+    st.session_state["selected_scenario"] = "BAU"
 
-# (Optional) keep your old sidebar info/help below
-st.sidebar.markdown("Select scenario type to explore results.")
+# Build 3 equal-width columns for buttons
+bcol1, bcol2, bcol3 = st.sidebar.columns(3)
 
+# Scenario button group
+with bcol1:
+    if st.button("BAU", use_container_width=True):
+        st.session_state["selected_scenario"] = "BAU"
+with bcol2:
+    if st.button("NCNC", use_container_width=True):
+        st.session_state["selected_scenario"] = "NCNC"
+with bcol3:
+    if st.button("Int.", use_container_width=True):
+        st.session_state["selected_scenario"] = "Interactive"  # internal key stays consistent
 
+# Retrieve selection
+selected_scenario = st.session_state["selected_scenario"]
 
-# Explain to users what the dropdown does
+# Highlight current selection visually
 st.sidebar.markdown(
-    """
-    ℹ️ **How to use the selector**
-
-    Choose a scenario from the drop-down menu to update all figures with the respective results, and read their commentary:
-
-    - **BAU (Business-as-usual):** projects Greece’s future based on current trends without additional climate measures.  
-    - **NCNC:** applies the policies and measures described in the main sectoral climate neutrality pathways for Greece.
-    """,
-    unsafe_allow_html=False
+    f"<div class='scenario-active'>Active Scenario: <b>{selected_scenario}</b></div>",
+    unsafe_allow_html=True
 )
 
+# Explanations
+st.sidebar.markdown("""
+**Scenario definitions:**
+
+- **BAU (Business-as-usual):** projects Greece’s future based on current trends, without new climate measures.  
+- **NCNC (Near Carbon Neutral):** applies climate neutrality pathways and key mitigation actions.  
+- **Interactive:** enables interactive adjustment of assumptions and sensitivity analysis.
+""")
 
 # Define which rows act as Sources / Converters / Sinks (as seen in your static Sankey)
 SOURCES = [
