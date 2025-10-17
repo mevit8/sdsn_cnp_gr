@@ -375,39 +375,28 @@ df_biofuels = load_biofuels_simple("data/LEAP_Biofuels.xlsx")
 
 
 # Sidebar
+# Sidebar
 st.sidebar.title("🎯 Scenario Selection")
 
 # Define scenarios
-scenarios = ["BAU", "NCNC", "Interactive"]  # keep internal mapping for consistency
+scenarios = ["BAU", "NCNC", "Interactive"]
 
-# Initialize state
-if "selected_scenario" not in st.session_state:
-    st.session_state["selected_scenario"] = "BAU"
-
-# Build 3 equal-width columns for buttons
-bcol1, bcol2, bcol3 = st.sidebar.columns(3)
-
-# Scenario button group
-with bcol1:
-    if st.button("BAU", use_container_width=True):
-        st.session_state["selected_scenario"] = "BAU"
-with bcol2:
-    if st.button("NCNC", use_container_width=True):
-        st.session_state["selected_scenario"] = "NCNC"
-with bcol3:
-    if st.button("Int.", use_container_width=True):
-        st.session_state["selected_scenario"] = "Interactive"  # internal key stays consistent
-
-# Retrieve selection
-selected_scenario = st.session_state["selected_scenario"]
-
-# Highlight current selection visually
-st.sidebar.markdown(
-    f"<div class='scenario-active'>Active Scenario: <b>{selected_scenario}</b></div>",
-    unsafe_allow_html=True
+# Use a persistent radio (default = BAU)
+selected_scenario = st.sidebar.radio(
+    "Choose scenario:",
+    scenarios,
+    index=0,  # ✅ BAU preselected by default
+    key="selected_scenario",
+    horizontal=True,  # optional: looks similar to your 3 buttons
 )
 
-# Explanations
+# Active state indicator
+st.sidebar.markdown(
+    f"<div class='scenario-active'>Active Scenario: <b>{selected_scenario}</b></div>",
+    unsafe_allow_html=True,
+)
+
+# Scenario definitions
 st.sidebar.markdown("""
 **Scenario definitions:**
 

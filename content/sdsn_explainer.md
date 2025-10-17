@@ -1,6 +1,4 @@
-## The SDSN pathway: 
-
-## A Decision Support approach under Uncertainty
+## The SDSN pathway: ## A Decision Support approach under Uncertainty
 
 We provide a Decision Framework to achieve the legally binding National Commitments (NCNC) with a btter way: Less emissions, faster, cheaper, and  with less efforts (implementation measures).
 
