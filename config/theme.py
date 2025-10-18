@@ -13,7 +13,6 @@ TAB_TITLES = [
     "💧 Land & Water Requirements",
     "🌍 SDSN Pathway",
 ]
-
 # Fuel charts palette (black, gold, brown)
 # Make sure the keys match  melted 'Component' values exactly.
 FUEL_COLORS: Dict[str, str] = {
@@ -46,26 +45,51 @@ CHART_HEIGHT = 500  # optional
 # theme.py
 
 EMISSIONS_COLORS = {
-    "Livestock": "#f87171",   # pink/red
-    "Crops": "#34d399",       # green
-    "Land-use": "#facc15",    # yellow
-    "Total emissions": "#2563eb",  # blue line
+    "Crops": "#81b29a",           # soft green
+    "Livestock": "#e07a5f",       # warm reddish-brown
+    "Land-use": "#f2cc8f",        # muted yellow
+    "Total emissions": "#3b82f6", # clean blue (for line)
 }
 
 COST_COLORS = {
-    "LabourCost": "#92400e",         # brown
-    "PesticideCost": "#22d3ee",      # turquoise
-    "MachineryRunningCost": "#60a5fa", # light blue
-    "DieselCost": "#9ca3af",         # gray
-    "FertilizerCost": "#facc15",     # yellow
+    "LabourCost": "#b56576",          # muted reddish-brown
+    "PesticideCost": "#5bc0be",       # turquoise / aqua
+    "MachineryRunningCost": "#8ecae6",# light sky blue
+    "DieselCost": "#6b7280",          # dark gray
+    "FertilizerCost": "#facc15",      # golden yellow
 }
 
 LANDUSE_COLORS = {
-    "FAOCropland": "#ef4444",    # red
-    "FAOHarvArea": "#fb923c",    # orange-red
+    "FAOCropland": "#ef4444",    # bright red
+    "FAOHarvArea": "#f97316",    # orange
     "FAOPasture": "#facc15",     # yellow
     "FAOUrban": "#9ca3af",       # gray
-    "FAOForest": "#22c55e",      # green
+    "FAOForest": "#10b981",      # teal-green
     "FAOOtherLand": "#374151",   # dark gray
 }
+
+# --- Explicit stack orders (bottom → top) to match figure panels ---
+
+COST_ORDER = [
+    "LabourCost",             # bottom
+    "MachineryRunningCost",
+    "PesticideCost",
+    "DieselCost",
+    "FertilizerCost",         # top
+]
+
+EMISSIONS_ORDER = [
+    "Crops",                  # bottom
+    "Livestock",
+    "Land-use",               # top
+]
+
+LANDUSE_ORDER = [
+    "FAOCropland",            # bottom
+    "FAOHarvArea",
+    "FAOPasture",
+    "FAOForest",
+    "FAOUrban",
+    "FAOOtherLand",           # top
+]
 

@@ -7,3 +7,4 @@ The water requirements of all sectors studied in LEAP, are calculated by the Wat
 The estimation of water requirements followed the same approach with the energy demand, assuming an Activity Level (AL), typical water consumption rates (CR), and losses coefficients (LC), per sector and use.
 
 
+

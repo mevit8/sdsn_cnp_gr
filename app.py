@@ -2,7 +2,7 @@ from __future__ import annotations
 import streamlit as st
 from config import theme
 import pandas as pd
-from models.data_loader import load_and_prepare_excel, prepare_stacked_data
+from models.data_loader import load_and_prepare_excel, prepare_stacked_data, aggregate_to_periods, load_water_requirements
 from views.charts import (
     render_bar_chart,
     render_line_chart,
@@ -23,23 +23,26 @@ from PIL import Image
 import plotly.graph_objects as go
 from pathlib import Path
 
+# ---------------------------------------------------------------------
+# Basic setup
+# ---------------------------------------------------------------------
 st.set_page_config(page_title="SDSN GCH - GR Climate Neutrality", layout="wide")
 
+# ---------------------------------------------------------------------
+# Helper functions
+# ---------------------------------------------------------------------
 def load_scenario_md(base_name: str, scenario: str) -> str | None:
-    """
-    Return the text of a scenario-specific Markdown file if it exists.
-    - Tries content/{base_name}_{SCENARIO}.md first
-    - Falls back to content/{base_name}.md
-    """
+    """Return scenario-specific or fallback Markdown text."""
     scen = (scenario or "").strip().upper()
     candidates = [
-        BASE_DIR / "content" / f"{base_name}_{scen}.md",  # e.g. ships_explainer_BAU.md
-        BASE_DIR / "content" / f"{base_name}.md"          # fallback default
+        BASE_DIR / "content" / f"{base_name}_{scen}.md",
+        BASE_DIR / "content" / f"{base_name}.md",
     ]
     for path in candidates:
         if path.exists():
             return path.read_text(encoding="utf-8")
     return None
+
 
 @st.cache_data(show_spinner=False)
 def load_energy_balance(path: str = "data/LEAP_Energy_Balance.xlsx") -> pd.DataFrame:
@@ -50,97 +53,51 @@ def load_energy_balance(path: str = "data/LEAP_Energy_Balance.xlsx") -> pd.DataF
         if col not in ("Scenario", "Flow"):
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
     return df
-
-
-def aggregate_to_periods(
-    df: pd.DataFrame,
-    year_col: str = "Year",
-    value_col: str = "Value",
-    component_col: str = "Component",
-    period_years: int = 4,
-    agg: str = "mean",   # or "sum"
-    label_mode: str = "range",  # "range" -> "2000–2003", "start" -> "2000"
-):
-    """
-    Bin annual rows into N-year periods and aggregate by Component.
-    Returns (df_period, period_order_str_list).
-    """
-    df = df.copy()
-    # base = 0 (calendar aligned). If you want to align to a specific start, change the modulo base.
-    start = (df[year_col].min() // period_years) * period_years
-    # Compute period start
-    df["PeriodStart"] = ((df[year_col] - start) // period_years) * period_years + start
-    df["PeriodEnd"] = df["PeriodStart"] + (period_years - 1)
-
-    if label_mode == "range":
-        df["PeriodStr"] = df["PeriodStart"].astype(str) + "–" + df["PeriodEnd"].astype(str)
-    else:
-        df["PeriodStr"] = df["PeriodStart"].astype(str)
-
-    # Aggregate within each period by component
-    if agg == "sum":
-        grouped = df.groupby(["PeriodStart", "PeriodStr", component_col], as_index=False)[value_col].sum()
-    else:
-        grouped = df.groupby(["PeriodStart", "PeriodStr", component_col], as_index=False)[value_col].mean()
-
-    # Build category order for x-axis
-    period_order = grouped.drop_duplicates(subset=["PeriodStart", "PeriodStr"]) \
-                          .sort_values("PeriodStart")["PeriodStr"].tolist()
-
-    return grouped, period_order
-
-
-# Resolve paths relative to this file
+# ---------------------------------------------------------------------
+# Paths and styling
+# ---------------------------------------------------------------------
 BASE_DIR = Path(__file__).parent
 CSS_PATH = BASE_DIR / "static" / "style.css"
 LOGO_PATH = BASE_DIR / "static" / "logo.png"
 DATA_DIR = BASE_DIR / "data"
 
+
 def load_css(path: Path = CSS_PATH):
-    """Inject CSS from a file once per run."""
+    """Inject CSS from file once per run."""
     if path.exists():
-        css = path.read_text(encoding="utf-8")
-        st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
-    else:
-        st.sidebar.info(f"CSS not found at: {path}")
+        st.markdown(f"<style>{path.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
+
 
 @st.cache_resource(show_spinner=False)
 def load_logo(path: Path = LOGO_PATH):
-    """Open the logo image once and reuse the PIL object."""
     return Image.open(path)
 
-# Call once at startup
-load_css()
 
-# Sidebar logo (cached) with a safe fallback
+# Apply CSS and logo
+load_css()
 if LOGO_PATH.exists():
     try:
         st.sidebar.image(load_logo(), width=160)
     except Exception:
         st.sidebar.image(str(LOGO_PATH), width=160)
-else:
-    st.sidebar.info(f"Logo not found at: {LOGO_PATH}")
 
+# ---------------------------------------------------------------------
+# Data loaders
+# ---------------------------------------------------------------------
 @st.cache_data(show_spinner=False)
 def load_biofuels_simple(path: str = "data/LEAP_Biofuels.xlsx", sheet: str = "Biofuels") -> pd.DataFrame:
-    import pandas as pd
     df = pd.read_excel(path, sheet_name=sheet)
-
-    # Normalize column names (strip spaces)
     df = df.rename(columns={c: str(c).strip() for c in df.columns})
-
     required = ["Year", "MinProd_ktoe", "MaxProd_ktoe", "Demand_BAU_ktoe", "Demand_NCNC_ktoe"]
     missing = [c for c in required if c not in df.columns]
     if missing:
         raise ValueError(f"Missing columns in '{sheet}': {missing}")
-
-    # Numbers
     df["Year"] = pd.to_numeric(df["Year"], errors="coerce").astype("Int64")
     for c in df.columns:
         if c != "Year":
             df[c] = pd.to_numeric(df[c], errors="coerce")
-
     return df
+
 
 @st.cache_data(show_spinner=False)
 def load_maritime_base(path: str = "data/Maritime_results_all_scenarios.xlsx", sheet: str = "base") -> pd.DataFrame:
@@ -150,10 +107,10 @@ def load_maritime_base(path: str = "data/Maritime_results_all_scenarios.xlsx", s
             df[c] = pd.to_numeric(df[c], errors="coerce")
     return df
 
+
 @st.cache_data(show_spinner=False)
 def load_cap_series(path: str) -> pd.DataFrame:
     import pandas as pd
-    # Try common separators
     for sep in (",", ";", "\t", "|"):
         try:
             df = pd.read_csv(path, sep=sep)
@@ -162,207 +119,21 @@ def load_cap_series(path: str) -> pd.DataFrame:
             df = pd.DataFrame()
     if df.empty:
         return df
-
-    # Normalize and detect columns
     df.columns = [str(c).strip() for c in df.columns]
     lower = {c.lower(): c for c in df.columns}
     year_col = lower.get("year")
     cap_col = lower.get("co2_cap") or lower.get("cap")
     if not year_col or not cap_col:
         return pd.DataFrame()
-
     out = df[[year_col, cap_col]].rename(columns={year_col: "Year", cap_col: "CO2_Cap"}).copy()
     out["Year"] = pd.to_numeric(out["Year"], errors="coerce")
     out["CO2_Cap"] = pd.to_numeric(out["CO2_Cap"], errors="coerce")
-    out = out.dropna(subset=["Year", "CO2_Cap"]).sort_values("Year")
-    return out
-@st.cache_data(show_spinner=False)
+    return out.dropna(subset=["Year", "CO2_Cap"]).sort_values("Year")
 
-@st.cache_data(show_spinner=False)
-def load_water_requirements(
-    uses_path: str | Path | None = None,
-    month_path: str | Path | None = None,
-) -> dict[str, pd.DataFrame]:
-    """Load Urban/Agriculture/Industrial from Greeceplots_uses.xlsx and Monthly from Greeceplots_month.xlsx."""
-    import pandas as pd
 
-    uses_path  = uses_path  or (DATA_DIR / "Greeceplots_uses.xlsx")
-    month_path = month_path or (DATA_DIR / "Greeceplots_month.xlsx")
-    out: dict[str, pd.DataFrame | None] = {"urban": None, "agriculture": None, "industrial": None, "monthly": None}
-
-    # ---------- helpers ----------
-    def norm_months(x: pd.Series) -> pd.Series:
-        names = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"]
-        s = x.astype(str).str.strip().str.upper()
-        gr = {"ΙΑΝ":"JAN","ΦΕΒ":"FEB","ΜΑΡ":"MAR","ΑΠΡ":"APR","ΜΑΙ":"MAY","ΙΟΥΝ":"JUN",
-              "ΙΟΥΛ":"JUL","ΑΥΓ":"AUG","ΣΕΠ":"SEP","ΟΚΤ":"OCT","ΝΟΕ":"NOV","ΔΕΚ":"DEC"}
-        def conv(v: str):
-            try:
-                n = int(float(v))
-                if 1 <= n <= 12:
-                    return names[n-1]
-            except Exception:
-                pass
-            return gr.get(v, v)
-        return pd.Categorical(s.map(conv), categories=names, ordered=True)
-
-    def try_monthly(dfm: pd.DataFrame) -> pd.DataFrame | None:
-        if dfm is None or dfm.empty:
-            return None
-        dfm = dfm.copy()
-        dfm.columns = [str(c).strip() for c in dfm.columns]
-        lower = [c.lower() for c in dfm.columns]
-
-        # Case A: Month in rows
-        if any(c in lower for c in ("month","months")) and any(c in lower for c in ("average","avg","mean","avr")):
-            mcol = next((c for c in dfm.columns if c.lower() in ("month","months")), None)
-            acol = next((c for c in dfm.columns if c.lower() in ("average","avg","mean","avr")), None)
-            mn   = next((c for c in dfm.columns if c.lower() in ("min","minimum","lower")), None)
-            mx   = next((c for c in dfm.columns if c.lower() in ("max","maximum","upper")), None)
-            sub = dfm[[mcol, acol] + ([mn] if mn else []) + ([mx] if mx else [])].rename(
-                columns={mcol:"Month", acol:"Average", **({mn:"Min"} if mn else {}), **({mx:"Max"} if mx else {})}
-            )
-            sub["Month"] = norm_months(sub["Month"])
-            for c in [c for c in ("Average","Min","Max") if c in sub.columns]:
-                sub[c] = pd.to_numeric(sub[c], errors="coerce")
-            return sub.sort_values("Month")
-
-        # Case B: Rows = Min/Avg/Max, Cols = Months
-        month_like = [c for c in dfm.columns if str(c).strip().upper() in
-                      ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC",
-                       "1","2","3","4","5","6","7","8","9","10","11","12"]]
-        if len(month_like) >= 12:
-            idx_avg = idx_min = idx_max = None
-            for i in range(len(dfm)):
-                tag = str(dfm.iloc[i, 0]).strip().lower()
-                if tag in ("average","avg","mean","avr"): idx_avg = i
-                elif tag in ("min","minimum","lower"):    idx_min = i
-                elif tag in ("max","maximum","upper"):    idx_max = i
-            if idx_avg is not None:
-                months = [str(c).strip().upper() for c in month_like[:12]]
-                data = {"Month": months, "Average": pd.to_numeric(dfm.loc[idx_avg, month_like].values[:12], errors="coerce")}
-                if idx_min is not None:
-                    data["Min"] = pd.to_numeric(dfm.loc[idx_min, month_like].values[:12], errors="coerce")
-                if idx_max is not None:
-                    data["Max"] = pd.to_numeric(dfm.loc[idx_max, month_like].values[:12], errors="coerce")
-                sub = pd.DataFrame(data)
-                sub["Month"] = norm_months(sub["Month"])
-                return sub.sort_values("Month")
-
-        return None
-
-    # ---------- load annual uses ----------
-    try:
-        df = pd.read_excel(uses_path)
-        df.columns = [str(c).strip() for c in df.columns]
-
-        out["urban"] = (
-            df[["Year", "Urban.min", "Urban.avr", "Urban.max"]]
-            .rename(columns={"Urban.avr": "Average", "Urban.min": "Min", "Urban.max": "Max"})
-            .loc[:, ["Year", "Average", "Min", "Max"]]
-        )
-        out["agriculture"] = (
-            df[["Year", "Agr.min", "Agr.avr", "Agr.max"]]
-            .rename(columns={"Agr.avr": "Average", "Agr.min": "Min", "Agr.max": "Max"})
-            .loc[:, ["Year", "Average", "Min", "Max"]]
-        )
-        out["industrial"] = (
-            df[["Year", "Ind.min", "Ind.avr", "Ind.max"]]
-            .rename(columns={"Ind.avr": "Average", "Ind.min": "Min", "Ind.max": "Max"})
-            .loc[:, ["Year", "Average", "Min", "Max"]]
-        )
-    except Exception as e:
-        st.warning(f"Water (uses) not loaded from {uses_path}: {e}")
-
-    # ---------- load monthly ----------
-    try:
-        mxls = pd.ExcelFile(month_path)
-        for s in mxls.sheet_names:
-            cand = try_monthly(mxls.parse(s))
-            if cand is not None and not cand.empty:
-                out["monthly"] = cand
-                break
-        if out["monthly"] is None:
-            st.info(f"Could not detect a monthly table in {month_path}.")
-    except Exception as e:
-        st.info(f"Water (monthly) not loaded from {month_path}: {e}")
-
-    return out
-
-    def norm_months(x: pd.Series) -> pd.Series:
-        names = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"]
-        s = x.astype(str).str.strip().str.upper()
-
-        def conv(v: str):
-            try:
-                n = int(float(v))
-                if 1 <= n <= 12: return names[n-1]
-            except Exception:
-                pass
-            gr = {"ΙΑΝ":"JAN","ΦΕΒ":"FEB","ΜΑΡ":"MAR","ΑΠΡ":"APR","ΜΑΙ":"MAY","ΙΟΥΝ":"JUN",
-                  "ΙΟΥΛ":"JUL","ΑΥΓ":"AUG","ΣΕΠ":"SEP","ΟΚΤ":"OCT","ΝΟΕ":"NOV","ΔΕΚ":"DEC"}
-            return gr.get(v, v)
-
-        cat = pd.Categorical(s.map(conv), categories=names, ordered=True)
-        return cat
-
-    def try_monthly(dfm: pd.DataFrame) -> pd.DataFrame | None:
-        if dfm is None or dfm.empty: return None
-        dfm = dfm.copy()
-        dfm.columns = [str(c).strip() for c in dfm.columns]
-        lower = [c.lower() for c in dfm.columns]
-
-        # A) Columns: Month, Average/Avg/Mean, (Min), (Max)
-        if any(c in lower for c in ("month","months")) and any(c in lower for c in ("average","avg","mean","avr")):
-            mcol = next((c for c in dfm.columns if c.lower() in ("month","months")), None)
-            acol = next((c for c in dfm.columns if c.lower() in ("average","avg","mean","avr")), None)
-            mn   = next((c for c in dfm.columns if c.lower() in ("min","minimum","lower")), None)
-            mx   = next((c for c in dfm.columns if c.lower() in ("max","maximum","upper")), None)
-            sub = dfm[[mcol, acol] + ([mn] if mn else []) + ([mx] if mx else [])].rename(
-                columns={mcol:"Month", acol:"Average", **({mn:"Min"} if mn else {}), **({mx:"Max"} if mx else {})}
-            )
-            sub["Month"] = norm_months(sub["Month"])
-            for c in [c for c in ("Average","Min","Max") if c in sub.columns]:
-                sub[c] = pd.to_numeric(sub[c], errors="coerce")
-            return sub.sort_values("Month")
-
-        # B) Rows: first col labels (min/avr/max), columns = JAN..DEC (or 1..12)
-        month_like = [c for c in dfm.columns if str(c).strip().upper() in
-                      ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC",
-                       "1","2","3","4","5","6","7","8","9","10","11","12"]]
-        if len(month_like) >= 12:
-            idx_avg = idx_min = idx_max = None
-            for i in range(len(dfm)):
-                tag = str(dfm.iloc[i, 0]).strip().lower()
-                if tag in ("average","avg","mean","avr"): idx_avg = i
-                elif tag in ("min","minimum","lower"):    idx_min = i
-                elif tag in ("max","maximum","upper"):    idx_max = i
-            if idx_avg is not None:
-                months = [str(c).strip().upper() for c in month_like[:12]]
-                data = {"Month": months, "Average": pd.to_numeric(dfm.loc[idx_avg, month_like].values[:12], errors="coerce")}
-                if idx_min is not None: data["Min"] = pd.to_numeric(dfm.loc[idx_min, month_like].values[:12], errors="coerce")
-                if idx_max is not None: data["Max"] = pd.to_numeric(dfm.loc[idx_max, month_like].values[:12], errors="coerce")
-                sub = pd.DataFrame(data)
-                sub["Month"] = norm_months(sub["Month"])
-                return sub.sort_values("Month")
-
-        return None
-
-    try:
-        mxls = pd.ExcelFile(month_path)
-        for s in mxls.sheet_names:
-            cand = try_monthly(mxls.parse(s))
-            if cand is not None and not cand.empty:
-                out["monthly"] = cand
-                break
-        if out["monthly"] is None:
-            st.info(f"Could not detect a monthly table in {month_path}.")
-    except Exception as e:
-        st.info(f"Water (monthly) not loaded from {month_path}: {e}")
-
-    return out  # {'urban','agriculture','industrial','monthly'}
-
-# Load data
+# ---------------------------------------------------------------------
+# Load all datasets
+# ---------------------------------------------------------------------
 df_costs = load_and_prepare_excel("data/Fable_46_Agricultural.xlsx")
 df_emissions = load_and_prepare_excel("data/Fable_46_GHG.xlsx")
 df_land = load_and_prepare_excel("data/Fable_46_Land.xlsx")
@@ -373,120 +144,71 @@ df_supply_emissions = load_and_prepare_excel("data/LEAP_Supply_Emissions.xlsx")
 df_energy_balance = load_energy_balance("data/LEAP_Energy_Balance.xlsx")
 df_biofuels = load_biofuels_simple("data/LEAP_Biofuels.xlsx")
 
-
-# Sidebar
-# Sidebar
+# ---------------------------------------------------------------------
+# Scenario selection
+# ---------------------------------------------------------------------
 st.sidebar.title("🎯 Scenario Selection")
-
-# Define scenarios
 scenarios = ["BAU", "NCNC", "Interactive"]
-
-# Use a persistent radio (default = BAU)
-selected_scenario = st.sidebar.radio(
-    "Choose scenario:",
-    scenarios,
-    index=0,  # ✅ BAU preselected by default
-    key="selected_scenario",
-    horizontal=True,  # optional: looks similar to your 3 buttons
-)
-
-# Active state indicator
+selected_scenario = st.sidebar.radio("Choose scenario:", scenarios, index=0, horizontal=True, key="selected_scenario")
 st.sidebar.markdown(
     f"<div class='scenario-active'>Active Scenario: <b>{selected_scenario}</b></div>",
     unsafe_allow_html=True,
 )
-
-# Scenario definitions
 st.sidebar.markdown("""
 **Scenario definitions:**
 
-- **BAU (Business-as-usual):** projects Greece’s future based on current trends, without new climate measures.  
-- **NCNC (Near Carbon Neutral):** applies climate neutrality pathways and key mitigation actions.  
-- **Interactive:** enables interactive adjustment of assumptions and sensitivity analysis.
+- **BAU (Business-as-usual):** continues current trends.  
+- **NCNC (Near Carbon Neutral):** follows climate neutrality pathways.  
+- **Interactive:** allows dynamic sensitivity analysis.
 """)
 
-# Define which rows act as Sources / Converters / Sinks (as seen in your static Sankey)
+# ---------------------------------------------------------------------
+# Energy flow structure (Sankey)
+# ---------------------------------------------------------------------
 SOURCES = [
-    "Coal Lignite Production", "Coal Lignite Imports",
-    "Wind Production", "Hydro Production", "Solar Production", "Geothermal Production",
-    "Crude Oil Imports", "Refinery Feedstocks Imports", "Petroleum Coke Imports",
-    "Natural Gas Imports", "Hydrogen Imports", "Biogas Imports", "CNG Imports",
-    "Coal Unspecified Imports", "Biomass Production", "Biomass Imports", "Biomass Supply",
+    "Coal Lignite Production", "Coal Lignite Imports", "Wind Production", "Hydro Production",
+    "Solar Production", "Geothermal Production", "Crude Oil Imports", "Refinery Feedstocks Imports",
+    "Petroleum Coke Imports", "Natural Gas Imports", "Hydrogen Imports", "Biogas Imports",
+    "CNG Imports", "Coal Unspecified Imports", "Biomass Production", "Biomass Imports", "Biomass Supply",
 ]
-CONVERTERS = [
-    "Electricity Generation", "Heat Generation", "Oil Refining",
-    "Synthetic Fuels Module", "Transmission and Distribution",
-]
+CONVERTERS = ["Electricity Generation", "Heat Generation", "Oil Refining", "Synthetic Fuels Module", "Transmission and Distribution"]
 SINKS = [
-    "Residential", "Industry", "Agriculture", "Service Tertiary Sector",
-    "Passenger Transportation", "Freight Transportation", "Maritime",
-    "Energy Product Industry", "Hydrogen Generation",
+    "Residential", "Industry", "Agriculture", "Service Tertiary Sector", "Passenger Transportation",
+    "Freight Transportation", "Maritime", "Energy Product Industry", "Hydrogen Generation",
     "Losses", "Exports", "Waste",
 ]
 
-# app.py (helper)
 def build_sankey_from_balance(df: pd.DataFrame, scenario: str | None = None) -> tuple[pd.DataFrame, list[str]]:
-    """
-    Build links in three steps:
-      1) Sources (rows) -> Carriers (columns)     [positive cells]
-      2) Carrier <-> Converter rows               [negative -> into converter; positive -> out of converter]
-      3) Carriers (columns) -> Sinks (rows)       [positive cells]
-    If `scenario` is provided and a 'Scenario' column exists, the table is filtered to that scenario first.
-    """
+    """Construct Sankey links for a given scenario."""
     df = df.copy()
     if "Flow" not in df.columns:
-        raise ValueError("Energy balance must have a 'Flow' column (first column).")
-
-    # Optional scenario filter (if present)
+        raise ValueError("Energy balance must have a 'Flow' column.")
     if scenario and "Scenario" in df.columns:
         df = df[df["Scenario"] == scenario].copy()
-        # if multiple rows per Flow, aggregate them
         df = df.groupby("Flow", as_index=False).sum(numeric_only=True)
     carriers = [c for c in df.columns if c not in ("Flow", "Total", "Scenario")]
-
     links = []
-
-    # 1) Sources -> Carriers
-    src_df = df[df["Flow"].isin(SOURCES)]
-    for _, row in src_df.iterrows():
-        src = row["Flow"]
+    for _, row in df[df["Flow"].isin(SOURCES)].iterrows():
         for fuel in carriers:
             val = row.get(fuel, 0.0)
-            if pd.notna(val) and float(val) > 0:
-                links.append({"source": src, "target": fuel, "value": float(val)})
-
-    # 2) Converters <-> Carriers
-    conv_df = df[df["Flow"].isin(CONVERTERS)]
-    for _, row in conv_df.iterrows():
-        conv = row["Flow"]
+            if pd.notna(val) and val > 0:
+                links.append({"source": row["Flow"], "target": fuel, "value": float(val)})
+    for _, row in df[df["Flow"].isin(CONVERTERS)].iterrows():
         for fuel in carriers:
             v = float(row.get(fuel, 0.0) or 0.0)
             if v < 0:
-                links.append({"source": fuel, "target": conv, "value": abs(v)})
+                links.append({"source": fuel, "target": row["Flow"], "value": abs(v)})
             elif v > 0:
-                links.append({"source": conv, "target": fuel, "value": v})
-
-    # 3) Carriers -> Sinks
-    sink_df = df[df["Flow"].isin(SINKS)]
-    for _, row in sink_df.iterrows():
-        sink = row["Flow"]
+                links.append({"source": row["Flow"], "target": fuel, "value": v})
+    for _, row in df[df["Flow"].isin(SINKS)].iterrows():
         for fuel in carriers:
             val = row.get(fuel, 0.0)
-            if pd.notna(val) and float(val) > 0:
-                links.append({"source": fuel, "target": sink, "value": float(val)})
-
+            if pd.notna(val) and val > 0:
+                links.append({"source": fuel, "target": row["Flow"], "value": float(val)})
     links_df = pd.DataFrame(links)
-
     present = lambda items: [i for i in items if i in set(df["Flow"]).union(carriers)]
-    node_order = (
-        present(SOURCES) +
-        present(CONVERTERS) +
-        [f for f in carriers if f in links_df["source"].tolist() or f in links_df["target"].tolist()] +
-        present(SINKS)
-    )
+    node_order = present(SOURCES) + present(CONVERTERS) + [f for f in carriers if f in links_df["source"].tolist() or f in links_df["target"].tolist()] + present(SINKS)
     return links_df, node_order
-
-
 # Tabs
 tab_overview, tab_food, tab_energy, tab9, tab10, tab11, tab_sdsn = st.tabs(theme.TAB_TITLES)
 
@@ -529,13 +251,37 @@ with tab_food:
 
         # --- Emissions (Mt CO₂e) ---
         with col1:
+            # --- Select relevant columns
             cols = ["CropCO2e", "LiveCO2e", "LandCO2"]
             melted, years = prepare_stacked_data(df_emissions, selected_scenario, "Year", cols)
 
-            total_df = df_emissions[df_emissions["Scenario"] == selected_scenario][["Year", "FAOTotalCO2e"]].copy()
-            total_df = total_df.rename(columns={"FAOTotalCO2e": "Value"})
-            total_df["Component"] = "Total CO₂e"
+            # --- Normalize component names to match theme keys
+            name_map = {
+                "CropCO2e": "Crops",
+                "LiveCO2e": "Livestock",
+                "LandCO2": "Land-use",
+                "FAOTotalCO2e": "Total emissions",
+                "Total CO₂e": "Total emissions",
+            }
+            melted["Component"] = melted["Component"].replace(name_map)
 
+            # --- Apply categorical order from theme
+            if hasattr(theme, "EMISSIONS_ORDER"):
+                melted["Component"] = pd.Categorical(
+                    melted["Component"],
+                    categories=theme.EMISSIONS_ORDER,
+                    ordered=True,
+                )
+                melted = melted.sort_values(["Year", "Component"])
+
+            # --- Prepare total line
+            total_df = (
+                df_emissions[df_emissions["Scenario"] == selected_scenario][["Year", "FAOTotalCO2e"]]
+                .rename(columns={"FAOTotalCO2e": "Value"})
+                .assign(Component="Total emissions")
+            )
+
+            # --- Render chart using theme colors and line style
             render_grouped_bar_and_line(
                 prod_df=melted,
                 demand_df=total_df,
@@ -543,23 +289,26 @@ with tab_food:
                 y_col="Value",
                 category_col="Component",
                 title="Production-based agricultural emissions",
-                colors=theme.EMISSIONS_COLORS,
+                colors=getattr(theme, "EMISSIONS_COLORS", {}),
                 y_label="Mt CO₂e",
-                key="food_emissions"
+                key=f"food_emissions_{selected_scenario.lower()}",
             )
-
         # --- Costs (M€) ---
         with col2:
             cols = ["FertilizerCost", "LabourCost", "MachineryRunningCost", "DieselCost", "PesticideCost"]
             melted, years = prepare_stacked_data(df_costs, selected_scenario, "Year", cols)
+
+            # ✅ Use the same color palette as the Interactive chart
             render_bar_chart(
                 melted,
                 "Year", "Value", "Component",
                 "Agricultural production cost",
                 [str(y) for y in years],
+                colors=theme.COST_COLORS,   # ← add this line
                 y_label="M€",
                 key="food_costs"
             )
+
 
         # --- Land use (1000 km²) ---
         col3, = st.columns(1)
@@ -582,7 +331,15 @@ with tab_food:
 
 with tab_energy:
     scen = (selected_scenario or "").strip().upper()
+    # --- Handle INTERACTIVE scenario separately ---
+    if scen == "INTERACTIVE":
+        from views.charts import render_energy_interactive_controls
+        render_energy_interactive_controls("Energy Emissions")
+        st.stop()  # prevent BAU/NCNC charts from rendering below
 
+    # ---------------------------------------------------------------------
+    # SCENARIOS: BAU / NCNC (existing charts)
+    # ---------------------------------------------------------------------
     # Scenario-specific explainer first
     scen_file = BASE_DIR / "content" / f"energy_emissions_explainer_{scen}.md"
     default_file = BASE_DIR / "content" / "energy_emissions_explainer.md"
@@ -602,12 +359,14 @@ with tab_energy:
     else:
         st.warning(f"No energy explainer found for scenario {scen} or default.")
 
-    # First row: Energy consumption & Energy consumption emissions
+    # ---------------------------------------------------------------------
+    # First row: Energy consumption & Emissions
+    # ---------------------------------------------------------------------
     row1_col1, row1_col2 = st.columns(2)
 
     with row1_col1:
         cols = ["Residential", "Agriculture", "Industry", "Energy Products",
-                "Terrestrial Transportation", "Aviation", "Maritime", "Services"]
+                "Passenger Transportation", "Freight Transportation", "Maritime", "Services"]
         melted, years = prepare_stacked_data(df_energy, selected_scenario, "Year", cols)
         period_df, period_order = aggregate_to_periods(
             melted, year_col="Year", value_col="Value", component_col="Component",
@@ -623,7 +382,7 @@ with tab_energy:
 
     with row1_col2:
         cols = ["Residential", "Agriculture", "Industry", "Energy Products",
-                "Terrestrial Transportation", "Aviation", "Maritime", "Services"]
+                "Passenger Transportation", "Freight Transportation", "Maritime", "Services"]
         melted, years = prepare_stacked_data(df_demand_emissions, selected_scenario, "Year", cols)
         period_df, period_order = aggregate_to_periods(
             melted, year_col="Year", value_col="Value", component_col="Component",
@@ -631,13 +390,15 @@ with tab_energy:
         )
         render_bar_chart(
             period_df, "PeriodStr", "Value", "Component",
-            "Emissions energy consumption by sector",
+            "Emissions from energy consumption by sector",
             period_order,
             y_label="MtCO₂e",
             key="energy_demand_emissions"
         )
 
+    # ---------------------------------------------------------------------
     # Second row: Energy per fuel & Fuel emissions
+    # ---------------------------------------------------------------------
     row2_col1, row2_col2 = st.columns(2)
 
     with row2_col1:
@@ -674,6 +435,9 @@ with tab_energy:
 
     st.markdown("---")  # visual separator
 
+    # ---------------------------------------------------------------------
+    # Energy Balance (Sankey)
+    # ---------------------------------------------------------------------
     SANKEY_LABEL_MAP = {
         "Service Tertiary Sector": "Service<br>Tertiary",
         "Passenger Transportation": "Passenger<br>Transport",
@@ -687,9 +451,6 @@ with tab_energy:
         "Transmission and Distribution": "Transmission &<br>Distribution",
     }
 
-    scen = (selected_scenario or "").strip().upper()
-
-    # Scenario-specific explainer first
     scen_file = BASE_DIR / "content" / f"energy_balance_explainer_{scen}.md"
     default_file = BASE_DIR / "content" / "energy_balance_explainer.md"
 
@@ -709,35 +470,17 @@ with tab_energy:
         st.warning(f"No energy balance explainer found for scenario {scen} or default.")
 
     SANKEY_NODE_COLORS = {
-        # fuels/carriers
-        "Electricity": "#2563eb",
-        "Natural Gas": "#0ea5e9",
-        "Heat": "#ea580c",
-        "Crude Oil": "#f59e0b",
-        "Biomass": "#16a34a",
-        "Solar": "#fbbf24",
-        "Hydrogen": "#a855f7",
-        "Ethanol": "#22c55e",
-        "Synthetic Fuels": "#06b6d4",
-        # converters
-        "Electricity Generation": "#93c5fd",
-        "Heat Generation": "#fdba74",
-        "Oil Refining": "#fcd34d",
-        "Synthetic Fuels Module": "#99f6e4",
+        "Electricity": "#2563eb", "Natural Gas": "#0ea5e9", "Heat": "#ea580c",
+        "Crude Oil": "#f59e0b", "Biomass": "#16a34a", "Solar": "#fbbf24",
+        "Hydrogen": "#a855f7", "Ethanol": "#22c55e", "Synthetic Fuels": "#06b6d4",
+        "Electricity Generation": "#93c5fd", "Heat Generation": "#fdba74",
+        "Oil Refining": "#fcd34d", "Synthetic Fuels Module": "#99f6e4",
         "Transmission and Distribution": "#cbd5e1",
-        # sinks
-        "Residential": "#111827",
-        "Industry": "#374151",
-        "Agriculture": "#4b5563",
-        "Service Tertiary Sector": "#6b7280",
-        "Passenger Transportation": "#9ca3af",
-        "Freight Transportation": "#9ca3af",
-        "Maritime": "#9ca3af",
-        "Energy Product Industry": "#6b7280",
-        "Hydrogen Generation": "#a78bfa",
-        "Losses": "#d1d5db",
-        "Exports": "#d1d5db",
-        "Waste": "#d1d5db",
+        "Residential": "#111827", "Industry": "#374151", "Agriculture": "#4b5563",
+        "Service Tertiary Sector": "#6b7280", "Passenger Transportation": "#9ca3af",
+        "Freight Transportation": "#9ca3af", "Maritime": "#9ca3af",
+        "Energy Product Industry": "#6b7280", "Hydrogen Generation": "#a78bfa",
+        "Losses": "#d1d5db", "Exports": "#d1d5db", "Waste": "#d1d5db",
     }
 
     try:
@@ -756,6 +499,7 @@ with tab_energy:
             )
     except Exception as e:
         st.error(f"Failed to build Sankey: {e}")
+
 with tab9:
     scen = (selected_scenario or "").strip().upper()
 

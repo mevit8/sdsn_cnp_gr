@@ -9,6 +9,7 @@ import pandas as pd
 from pathlib import Path
 
 ColorSpec = Union[Dict[str, str], List[str], None]
+
 # -----------------------------
 # Helpers
 # -----------------------------
@@ -71,26 +72,74 @@ def _hex_to_rgba(hex_color: str, alpha: float) -> str:
     g = int(hex_color[2:4], 16)
     b = int(hex_color[4:6], 16)
     return f"rgba({r},{g},{b},{alpha})"
+
+
 # -----------------------------
 # Generic Charts
 # -----------------------------
 def render_bar_chart(df, x_col, y_col, category_col, title,
                      x_order=None, colors=None, y_label=None, key=None):
+    """Generic bar chart renderer respecting explicit stack orders from theme."""
+
+    df = df.copy()
+
+    # --- Determine base category order ---
+    if pd.api.types.is_categorical_dtype(df[category_col]):
+        cat_order = list(df[category_col].cat.categories)
+    else:
+        cat_order = list(df[category_col].unique())
+
+    # --- Apply theme-based canonical order if known ---
+    explicit_order = None
+    if colors is theme.COST_COLORS:
+        explicit_order = getattr(theme, "COST_ORDER", None)
+    elif colors is theme.EMISSIONS_COLORS:
+        explicit_order = getattr(theme, "EMISSIONS_ORDER", None)
+    elif colors is theme.LANDUSE_COLORS:
+        explicit_order = getattr(theme, "LANDUSE_ORDER", None)
+
+    if explicit_order:
+        # keep only categories that exist in df, preserve order
+        cat_order = [c for c in explicit_order if c in cat_order]
+
+    # --- Set categorical and sort ---
+    df[category_col] = pd.Categorical(df[category_col], categories=cat_order, ordered=True)
+    df = df.sort_values([x_col, category_col])
+
+    # --- Build Plotly bar ---
     fig = px.bar(
         df,
         x=x_col,
         y=y_col,
         color=category_col,
-        category_orders={x_col: x_order} if x_order else None,
-        color_discrete_map=colors or {}
+        category_orders={category_col: cat_order},
+        color_discrete_map=colors or {},
+        color_discrete_sequence=None,
     )
+
+    # --- Fix stacking order (bottom→top according to cat_order) ---
+    sorted_traces = sorted(
+        fig.data,
+        key=lambda t: cat_order.index(t.name) if t.name in cat_order else 999
+    )
+    fig.data = tuple(reversed(sorted_traces))  # Plotly draws in reverse order
+
+    # --- Layout style ---
     fig.update_layout(
         title=title,
         xaxis_title="",
-        yaxis_title=y_label if y_label else y_col
+        yaxis_title=y_label if y_label else y_col,
+        width=getattr(theme, "CHART_WIDTH", 800),
+        height=getattr(theme, "CHART_HEIGHT", 500),
+        margin=dict(l=10, r=10, t=40, b=10),
+        legend_title=None,
+        barmode="stack",
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(family="Arial, Helvetica, sans-serif", color="#111", size=14),
     )
-    st.plotly_chart(fig, use_container_width=True, key=key or f"{title}_bar")
 
+    st.plotly_chart(fig, use_container_width=True, key=key or f"{title}_bar")
 
 def render_line_chart(df, x_col, y_col, category_col, title,
                       colors=None, y_label=None, key=None):
@@ -108,7 +157,6 @@ def render_line_chart(df, x_col, y_col, category_col, title,
     )
     st.plotly_chart(fig, use_container_width=True, key=key or f"{title}_line")
 
-
 def render_grouped_bar_and_line(prod_df, demand_df, x_col, y_col,
                                 category_col, title, height=None,
                                 colors=None, y_label=None, key=None):
@@ -120,21 +168,22 @@ def render_grouped_bar_and_line(prod_df, demand_df, x_col, y_col,
         color_discrete_map=colors or {}
     )
 
-    # Overlay line
-    line_name = demand_df[category_col].iloc[0] if category_col in demand_df else "Line"
-    line_color = None
-    if colors and isinstance(colors, dict):
-        line_color = colors.get(line_name)
+    # Overlay line if demand_df is provided
+    if demand_df is not None and not demand_df.empty:
+        line_name = demand_df[category_col].iloc[0] if category_col in demand_df else "Line"
+        line_color = None
+        if colors and isinstance(colors, dict):
+            line_color = colors.get(line_name)
 
-    fig.add_trace(
-        go.Scatter(
-            x=demand_df[x_col],
-            y=demand_df[y_col],
-            mode="lines+markers",
-            name=line_name,
-            line=dict(color=line_color or "#2563eb", width=2)
+        fig.add_trace(
+            go.Scatter(
+                x=demand_df[x_col],
+                y=demand_df[y_col],
+                mode="lines+markers",
+                name=line_name,
+                line=dict(color=line_color or "#2563eb", width=2)
+            )
         )
-    )
 
     fig.update_layout(
         title=title,
@@ -143,8 +192,10 @@ def render_grouped_bar_and_line(prod_df, demand_df, x_col, y_col,
         yaxis_title=y_label if y_label else y_col
     )
     st.plotly_chart(fig, use_container_width=True, key=key or f"{title}_grouped")
+
+
 # -----------------------------
-# Sankey (no y-axis)
+# Sankey
 # -----------------------------
 def render_sankey(
     links_df: pd.DataFrame,
@@ -222,11 +273,10 @@ def render_sankey(
     if plot:
         st.plotly_chart(fig, use_container_width=full_width, key=key or f"{title}_sankey")
     return fig
+
+
 # -----------------------------
 # Ships Charts
-# -----------------------------
-# -----------------------------
-# Ships Charts (refactored)
 # -----------------------------
 SHIP_TYPE_LABELS = {
     "C": "C: Container",
@@ -250,10 +300,9 @@ def render_ships_stock(df_base: pd.DataFrame, y_label: str = "Number of Stock Sh
         .assign(type=lambda x: x["col"].str.replace("^Stock_Ships_", "", regex=True))
     )
 
-    # <<< ADDED: replace short codes with descriptive labels
     d_long["type"] = d_long["type"].replace(SHIP_TYPE_LABELS)
 
-    pref = ["C: Container", "T: Tanker", "B: Bulk", "G: Cargo", "O: Other"]  # <<< UPDATED
+    pref = ["C: Container", "T: Tanker", "B: Bulk", "G: Cargo", "O: Other"]
     seen = list(dict.fromkeys([t for t in pref if t in d_long["type"].unique()]))
     rest = [t for t in sorted(d_long["type"].unique()) if t not in seen]
     order = seen + rest
@@ -289,10 +338,9 @@ def render_ships_new(df_base: pd.DataFrame, y_label: str = "Number of New Ships"
         .assign(type=lambda x: x["col"].str.replace("^New_Ships_", "", regex=True))
     )
 
-    # <<< ADDED: replace short codes with descriptive labels
     d_long["type"] = d_long["type"].replace(SHIP_TYPE_LABELS)
 
-    pref = ["C: Container", "T: Tanker", "B: Bulk", "G: Cargo", "O: Other"]  # <<< UPDATED
+    pref = ["C: Container", "T: Tanker", "B: Bulk", "G: Cargo", "O: Other"]
     seen = list(dict.fromkeys([t for t in pref if t in d_long["type"].unique()]))
     rest = [t for t in sorted(d_long["type"].unique()) if t not in seen]
     order = seen + rest
@@ -412,14 +460,8 @@ def render_ships_emissions_and_cap(
     if df_base.empty or "Year" not in df_base.columns:
         fig = go.Figure(); fig.update_layout(title="CO₂ Emissions & Cap — no data"); return fig
 
-    def _resolve(df: pd.DataFrame, names: list[str]) -> str | None:
-        lower = {c.lower(): c for c in df.columns}
-        for n in names:
-            if n.lower() in lower: return lower[n.lower()]
-        return None
-
-    em_col = _resolve(df_base, ["CO2_Emissions", "CO2 Emissions"])
-    ex_col = _resolve(df_base, ["Excess_Emissions", "Excess Emissions"])
+    em_col = _resolve_ci(df_base, ["CO2_Emissions", "CO2 Emissions"])
+    ex_col = _resolve_ci(df_base, ["Excess_Emissions", "Excess Emissions"])
     if not em_col:
         fig = go.Figure(); fig.update_layout(title="CO₂ Emissions & Cap — missing emissions col"); return fig
 
@@ -467,12 +509,7 @@ def render_ships_ets_penalty(df_base: pd.DataFrame, y_label: str = "Costs (M€)
     if df_base.empty or "Year" not in df_base.columns:
         return px.line(title="ETS Penalty — no data")
 
-    penalty_col = None
-    lower_map = {c.lower(): c for c in df_base.columns}
-    for key in ["ets_penalty", "ets penalty", "eth_penalty"]:
-        if key in lower_map:
-            penalty_col = lower_map[key]; break
-
+    penalty_col = _resolve_ci(df_base, ["ETS_Penalty", "ets_penalty", "ETS penalty", "eth_penalty"])
     if not penalty_col:
         return px.line(title="ETS Penalty — 'ETS_Penalty' column not found")
 
@@ -491,17 +528,7 @@ def render_ships_ets_penalty(df_base: pd.DataFrame, y_label: str = "Costs (M€)
     )
     return fig
 
-    if df_base.empty or "Year" not in df_base.columns:
-        return px.line(title="ETS Penalty — no data")
-    penalty_col = _resolve_ci(df_base, ["ETS_Penalty", "ets_penalty", "ETS penalty", "eth_penalty"])
-    if not penalty_col:
-        return px.line(title="ETS Penalty — 'ETS_Penalty' column not found")
-    d = df_base[["Year", penalty_col]].rename(columns={penalty_col: "ETS_Penalty"}).copy()
-    d["ETS_Penalty"] = pd.to_numeric(d["ETS_Penalty"], errors="coerce")
-    fig = px.line(d, x="Year", y="ETS_Penalty", title="ETS Penalty [M€]")
-    fig.update_traces(mode="lines+markers")
-    st.plotly_chart(fig, use_container_width=True, key=key or "ships_ets_penalty")
-    return fig
+
 # -----------------------------
 # Water Charts
 # -----------------------------
@@ -600,21 +627,18 @@ def render_water_monthly_band(
     fig.update_layout(title=title, xaxis_title="Months", yaxis_title=y_label)
     return fig
 
-# ------------------------------------------------------------
-# Interactive Scenarios
-# ------------------------------------------------------------
-import re
 
+# ------------------------------------------------------------
+# Interactive Scenarios - FOOD/LAND
+# ------------------------------------------------------------
 @st.cache_data(show_spinner=False)
 def load_interactive_data(
     path: str = "data/Fable_results_combos.xlsx",
     sheet_name: str = "Custom combinations from user"
 ) -> pd.DataFrame:
-    """Parse the interactive Excel file into tidy form.
-    Detects blocks like 'Option A-A-A (BAU)' and assigns metadata columns."""
+    """Parse the interactive Excel file into tidy form."""
     df_raw = pd.read_excel(path, sheet_name=sheet_name, header=None)
 
-    # Find rows that mark the start of a scenario block
     option_rows = df_raw.index[
         df_raw.iloc[:, 0].astype(str).str.contains("Option", na=False)
     ].tolist()
@@ -625,28 +649,18 @@ def load_interactive_data(
     blocks = []
     for i, start_row in enumerate(option_rows):
         label = str(df_raw.iloc[start_row, 0]).strip()
-
-        # Find where this block ends (next Option row or EOF)
         next_row = option_rows[i + 1] if i + 1 < len(option_rows) else len(df_raw)
-
-        # Header is immediately below "Option ..." line
         header_row = start_row + 1
         if header_row >= len(df_raw):
-            continue  # avoid out-of-bounds
+            continue
 
-        # Use that row as headers
         headers = df_raw.iloc[header_row].tolist()
-
-        # Data starts right after the header row
         data_start = header_row + 1
         block = df_raw.iloc[data_start:next_row].copy()
-
-        # Drop completely empty rows
         block = block.dropna(how="all")
         if block.empty:
             continue
 
-        # Assign the header row as columns
         block.columns = [str(h).strip() for h in headers]
         block["ScenarioOption"] = label
         blocks.append(block)
@@ -657,7 +671,6 @@ def load_interactive_data(
 
     df = pd.concat(blocks, ignore_index=True)
 
-    # Try to detect year column
     year_col = _resolve_ci(df, ["Year"])
     if year_col:
         df["Year"] = pd.to_numeric(df[year_col], errors="coerce")
@@ -665,6 +678,7 @@ def load_interactive_data(
         df["Year"] = None
 
     # Extract identifiers (A/B/C)
+    import re
     pat = r"Option\s*([A-C])\-([A-C])\-([A-C])"
     df[["PopOpt", "DietOpt", "ProdOpt"]] = df["ScenarioOption"].str.extract(pat)
     df["ScenarioOption"] = df["ScenarioOption"].str.replace(r"Option\s*", "", regex=True)
@@ -681,7 +695,6 @@ def load_interactive_data(
 def render_interactive_controls(tab_name: str):
     st.subheader(f"{tab_name} – Interactive Scenario Builder")
 
-    # --- (1) Expander description ---
     with st.expander("ℹ️ About the FABLE Calculator"):
         st.markdown("""
         **FABLE Calculator** uses CORINE national land cover baseline, FAOSTAT crop yields (historical & trend),
@@ -699,9 +712,6 @@ def render_interactive_controls(tab_name: str):
         Here, you can explore the **key demand-side drivers** (Population, Diet, Productivity) that shape these pathways.
         """, unsafe_allow_html=True)
 
-    # --- (2) Dropdown controls ---
-    col1, col2, col3 = st.columns(3)
-    
     col1, col2, col3 = st.columns(3)
 
     with col1:
@@ -743,13 +753,8 @@ def render_interactive_controls(tab_name: str):
             ),
         )
 
-
-
-    # --- (3) Chart rendering (must come AFTER dropdowns) ---
     render_interactive_charts(tab_name, pop, diet, prod)
 
-    # --- (4) Sensitivity section (optional) ---
-    # --- Sensitivity section ---
     st.markdown("---")
     st.subheader("📈 Sensitivity Summary")
 
@@ -783,27 +788,55 @@ def render_interactive_charts(tab_name: str, pop: str, diet: str, prod: str):
     st.markdown(f"### Results for Option {pop}-{diet}-{prod}")
     st.caption("Below are indicative charts based on your selected combination.")
 
-    # --- Detect relevant column groups ---
-    ghg_cols = [c for c in df.columns if "GHG" in c]
+    # Detect relevant column groups
+    ghg_cols = [c for c in df.columns if "GHG" in c or "CO2" in c or "Emissions" in c]
     cost_cols = [c for c in df.columns if "Cost" in c]
     land_cols = [c for c in df.columns if any(x in c for x in ["Land", "Cropland", "Forest", "Pasture", "Area"])]
 
-    # --- Layout: two charts on top (side by side) ---
     col1, col2 = st.columns(2)
 
-    # --- Emissions: grouped bar + line (left) ---
+    # Emissions chart
+    # Emissions chart
     with col1:
         if ghg_cols:
-            ghg_long = df.melt(id_vars=["Year"], value_vars=ghg_cols, var_name="Component", value_name="Value")
+            ghg_long = df.melt(
+                id_vars=["Year"],
+                value_vars=ghg_cols,
+                var_name="Component",
+                value_name="Value"
+            )
 
-            # Identify total column if present
+            # --- Normalize component names to match theme keys
+            name_map = {
+                "GHG Crop": "Crops",
+                "GHG Livestock": "Livestock",
+                "GHG LUC": "Land-use",
+                "GHG Total": "Total emissions",
+                "Total CO₂e": "Total emissions",
+            }
+            ghg_long["Component"] = ghg_long["Component"].replace(name_map)
+
+            # --- Apply categorical order from theme
+            if hasattr(theme, "EMISSIONS_ORDER"):
+                ghg_long["Component"] = pd.Categorical(
+                    ghg_long["Component"],
+                    categories=theme.EMISSIONS_ORDER,
+                    ordered=True,
+                )
+                ghg_long = ghg_long.sort_values(["Year", "Component"])
+
+            # --- Extract total line (if exists)
             total_candidates = [c for c in ghg_cols if "Total" in c]
             if total_candidates:
-                total_df = df[["Year", total_candidates[0]]].rename(columns={total_candidates[0]: "Value"})
-                total_df["Component"] = "Total CO₂e"
+                total_df = (
+                    df[["Year", total_candidates[0]]]
+                    .rename(columns={total_candidates[0]: "Value"})
+                    .assign(Component="Total emissions")
+                )
             else:
                 total_df = pd.DataFrame()
 
+            # --- Render using same theme-based settings
             render_grouped_bar_and_line(
                 prod_df=ghg_long,
                 demand_df=total_df if not total_df.empty else None,
@@ -812,11 +845,12 @@ def render_interactive_charts(tab_name: str, pop: str, diet: str, prod: str):
                 category_col="Component",
                 title="Production-based agricultural emissions",
                 y_label="Mt CO₂e",
-                colors=theme.EMISSIONS_COLORS,
-                key=f"ghg_interactive_{pop}{diet}{prod}"
+                colors=getattr(theme, "EMISSIONS_COLORS", {}),
+                key=f"ghg_interactive_{pop}{diet}{prod}",
             )
 
- # --- Costs: stacked bar (right) ---
+
+    # Costs chart
     with col2:
         if cost_cols:
             cost_long = df.melt(
@@ -825,19 +859,21 @@ def render_interactive_charts(tab_name: str, pop: str, diet: str, prod: str):
                 var_name="Component",
                 value_name="Value"
             )
-
-            # ✅ No renaming, no color override
-            # Use same behavior as BAU/NCNC — let render_bar_chart() pick theme.COST_COLORS internally
+            cost_long["Component"] = pd.Categorical(
+                cost_long["Component"],
+                categories=list(theme.COST_COLORS.keys()),
+                ordered=True
+            )
             render_bar_chart(
                 cost_long,
                 "Year", "Value", "Component",
                 "Agricultural production cost",
                 [str(y) for y in sorted(df["Year"].unique())],
+                colors=theme.COST_COLORS,
                 y_label="M€",
                 key=f"costs_interactive_{pop}{diet}{prod}"
             )
-
-    # --- Land Use: line chart (below full width) ---
+    # Land use chart
     col3, = st.columns(1)
     with col3:
         if land_cols:
@@ -847,8 +883,176 @@ def render_interactive_charts(tab_name: str, pop: str, diet: str, prod: str):
                 x_col="Year", y_col="Value", category_col="Component",
                 title="Land uses evolution",
                 y_label="1000 km²",
-                colors=theme.LAND_COLORS if hasattr(theme, "LAND_COLORS") else None,
+                colors=getattr(theme, "LANDUSE_COLORS", {}),
                 key=f"land_interactive_{pop}{diet}{prod}"
             )
 
 
+# ------------------------------------------------------------
+# Energy Tab Interactive Scenarios
+# ------------------------------------------------------------
+@st.cache_data(show_spinner=False)
+def load_energy_interactive_data(
+    path_cons: str = "data/LEAP_Demand_Cons.xlsx",
+    path_emis: str = "data/LEAP_Demand_Emissions.xlsx",
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load energy data with scenario codes like AA, AB, etc."""
+    df_cons = pd.read_excel(path_cons)
+    df_emis = pd.read_excel(path_emis)
+    
+    for df in (df_cons, df_emis):
+        df.columns = [str(c).strip() for c in df.columns]
+        
+    return df_cons, df_emis
+
+
+def render_energy_interactive_controls(tab_name: str):
+    """Interactive scenario UI for Energy tab with rich help boxes."""
+    st.subheader("⚡ Interactive Scenario – select your data and explore the results!")
+
+    with st.expander("ℹ️ About the Energy–Emissions Explorer"):
+        st.markdown("""
+        **LEAP (Low Emissions Analysis Platform)** is the core model of our framework, integrating
+        all energy demand and supply sectors, and simulating energy flows, fuel generation, and
+        resulting emissions.
+
+        It is a **scenario-based tool**, where the user defines pathways through key assumptions:
+        - **Population & GDP projections** based on *Shared Socioeconomic Pathways (SSPs)*,
+          harmonized across all models.
+        - **Renewables uptake** accounting for autonomous trends such as technology cost declines,
+          electrification, or other ongoing shifts toward cleaner energy.
+
+        For Greece, according to its *National Energy and Climate Plan (NECP)*, hydropower generation
+        is expected to remain roughly constant by 2050 due to water scarcity. Thus, **solar and wind**
+        are the main drivers of renewables uptake.
+        """)
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        ssp = st.selectbox(
+            "Population and GDP projections to 2050",
+            options=["A", "B", "C"],
+            format_func=lambda x: f"Option {x}: " + {
+                "A": "SSP1 (NCNC)",
+                "B": "SSP2 (BAU)",
+                "C": "SSP5",
+            }[x],
+            help=(
+                "**Option A – SSP1 (NCNC):**\n"
+                "Under the SSP1 ('strong societal sustainability and environmental consciousness') "
+                "scenario, Greece's population is projected to decline by ~14% by 2050 relative to 2021. "
+                "GDP grows by **2.0–2.5% per year**.\n\n"
+                "**Option B – SSP2 (BAU):**\n"
+                "Represents a 'middle of the road' case. Population declines more steeply (≈24% by 2100), "
+                "with moderate fertility, mortality, and migration trends. GDP growth averages **1.9–2.2%**.\n\n"
+                "**Option C – SSP5:**\n"
+                "An 'extreme rapid development' case: high tech progress, global integration, and GDP growth "
+                "of **~2.3–2.5%**, while population declines up to 40% by 2100."
+            ),
+        )
+
+    with col2:
+        renew = st.selectbox(
+            "Renewables uptake to 2050",
+            options=["A", "B", "C"],
+            format_func=lambda x: f"Option {x}: " + {
+                "A": "Conservative baseline",
+                "B": "Central (plausible market-driven baseline)",
+                "C": "Optimistic baseline",
+            }[x],
+            help=(
+                "**Option A – Conservative baseline:** Slower technology and market uptake; "
+                "limited by grid integration and permitting. Solar +0.4 %/yr, wind +0.2 %/yr.\n\n"
+                "**Option B – Central baseline:** Matches Greece's rapid PV rollout (as of 2023) and "
+                "moderate global cost declines. Solar +0.6 %/yr, wind +0.4 %/yr; hydropower steady. "
+                "Aligned with NECP baseline.\n\n"
+                "**Option C – Optimistic baseline:** Fast technology adoption with fewer practical constraints "
+                "(grid, permitting, storage). Solar +0.8 %/yr, wind +0.6 %/yr, faster conversion to delivered share."
+            ),
+        )
+
+    st.markdown(
+        "In all cases, **renewables shares follow NECP projections:** electrification in residential "
+        "(+15% by 2050), transport (~10%), and decreasing oil refining activity."
+    )
+    st.markdown(f"**Selected configuration:** Option {ssp}–{renew}")
+
+    render_energy_interactive_charts(tab_name, ssp, renew)
+
+    st.markdown("---")
+    st.subheader("📈 Sensitivity Summary")
+    sens_img = Path("content/energy_sensitivity.png")
+    if sens_img.exists():
+        with st.expander("Show sensitivity summary", expanded=False):
+            st.image(str(sens_img), width=600)
+            st.caption("Relative contribution of SSP and renewables uptake assumptions.")
+    else:
+        st.info("Sensitivity summary image not found.")
+
+
+def render_energy_interactive_charts(tab_name: str, ssp: str, renew: str):
+    """Render Energy tab charts based on SSP-Renewables scenario codes."""
+    from models.data_loader import prepare_stacked_data, aggregate_to_periods
+    
+    df_cons, df_emis = load_energy_interactive_data()
+    
+    if df_cons.empty or df_emis.empty:
+        st.warning("Energy interactive dataset not found or could not be parsed.")
+        return
+
+    # Build scenario code (e.g., "AA", "AB", "BC")
+    scenario_code = f"{ssp}{renew}"
+    
+    # Filter consumption data
+    if "Scenario" in df_cons.columns:
+        df_cons_filtered = df_cons[df_cons["Scenario"] == scenario_code].copy()
+    else:
+        st.warning(f"'Scenario' column not found in LEAP_Demand_Cons.xlsx")
+        return
+    
+    # Filter emissions data
+    if "Scenario" in df_emis.columns:
+        df_emis_filtered = df_emis[df_emis["Scenario"] == scenario_code].copy()
+    else:
+        st.warning(f"'Scenario' column not found in LEAP_Demand_Emissions.xlsx")
+        return
+
+    if df_cons_filtered.empty or df_emis_filtered.empty:
+        st.info(f"No data found for scenario {scenario_code} ({ssp}-{renew}).")
+        return
+
+    st.markdown(f"### Results for Option {ssp}-{renew}")
+
+    # Standard sector columns
+    cols = ["Residential", "Agriculture", "Industry", "Energy Products",
+            "Passenger Transportation", "Freight Transportation",
+            "Maritime", "Services"]
+
+    # Energy Consumption chart
+    melted_cons, years = prepare_stacked_data(df_cons_filtered, scenario_code, "Year", cols)
+    grouped_cons, order_cons = aggregate_to_periods(
+        melted_cons, year_col="Year", value_col="Value", component_col="Component",
+        period_years=4, agg="mean", label_mode="range"
+    )
+    render_bar_chart(
+        grouped_cons, "PeriodStr", "Value", "Component",
+        f"Energy consumption per sector ({ssp}-{renew})",
+        x_order=order_cons, 
+        y_label="ktoe",
+        key=f"energy_interactive_cons_{ssp}{renew}"
+    )
+
+    # Emissions chart
+    melted_emis, years_em = prepare_stacked_data(df_emis_filtered, scenario_code, "Year", cols)
+    grouped_emis, order_emis = aggregate_to_periods(
+        melted_emis, year_col="Year", value_col="Value", component_col="Component",
+        period_years=4, agg="mean", label_mode="range"
+    )
+    render_bar_chart(
+        grouped_emis, "PeriodStr", "Value", "Component",
+        f"Energy-related CO₂ emissions ({ssp}-{renew})",
+        x_order=order_emis,
+        y_label="MtCO₂e",
+        key=f"energy_interactive_emis_{ssp}{renew}"
+    )
