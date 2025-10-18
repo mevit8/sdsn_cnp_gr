@@ -79,14 +79,6 @@ def load_and_prepare_excel(path, year_col="YEAR"):
         df["Scenario"] = df["Scenario"].astype(str).str.strip().str.upper()
     else:
         df["Scenario"] = "BAU"
-
-    # --- Harmonize transport column naming (optional cleanup) ---
-    df.columns = (
-        df.columns.str.strip()
-        .str.replace("Passenger Transport", "Passenger Transportation", regex=False)
-        .str.replace("Freight Transport", "Freight Transportation", regex=False)
-    )
-
     return df
 
 
@@ -121,10 +113,13 @@ def prepare_stacked_data(df: pd.DataFrame, scenario: Optional[str], year_col: st
         st.info("ℹ️ No 'Scenario' column found — using all data (e.g. interactive datasets).")
 
     # --- Case- and space-insensitive matching ---
-    lower_map = {c.lower().replace(" ", ""): c for c in df.columns}
+    def _norm(s: str) -> str:
+        return s.lower().replace(" ", "").replace("_", "")
+
+    lower_map = {_norm(c): c for c in df.columns}
     matched_cols = []
     for name in cols:
-        key = name.lower().replace(" ", "")
+        key = _norm(name)
         if key in lower_map:
             colname = lower_map[key]
             if scenario is not None:
