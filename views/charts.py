@@ -8,6 +8,7 @@ from config import theme
 import pandas as pd
 from pathlib import Path
 
+
 ColorSpec = Union[Dict[str, str], List[str], None]
 
 # -----------------------------
@@ -892,19 +893,31 @@ def render_interactive_charts(tab_name: str, pop: str, diet: str, prod: str):
 # Energy Tab Interactive Scenarios
 # ------------------------------------------------------------
 @st.cache_data(show_spinner=False)
-def load_energy_interactive_data(
-    path_cons: str = "data/LEAP_Demand_Cons.xlsx",
-    path_emis: str = "data/LEAP_Demand_Emissions.xlsx",
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load energy data with scenario codes like AA, AB, etc."""
-    df_cons = pd.read_excel(path_cons)
-    df_emis = pd.read_excel(path_emis)
-    
-    for df in (df_cons, df_emis):
-        df.columns = [str(c).strip() for c in df.columns]
-        
-    return df_cons, df_emis
+def _load_energy_interactive_data(scenario_code: str):
+    """Load and filter interactive energy datasets for a given scenario code (AA, BB, etc.)."""
+    from models.data_loader import load_and_prepare_excel
 
+    # Include scenario_code in cache key so different selections reload fresh data
+    cache_key = f"energy_data_{scenario_code}"
+
+    df_cons = load_and_prepare_excel("data/LEAP_Demand_Cons.xlsx")
+    df_emis = load_and_prepare_excel("data/LEAP_Demand_Emissions.xlsx")
+    df_supply = load_and_prepare_excel("data/LEAP_Supply.xlsx")
+    df_supply_emis = load_and_prepare_excel("data/LEAP_Supply_Emissions.xlsx")
+
+    def filt(df, code):
+        if "Scenario" in df.columns:
+            mask = df["Scenario"].astype(str).str.strip().eq(code)
+            return df.loc[mask].copy()
+        return df.copy()
+
+    # Return as a tuple so caching recognizes scenario_code as unique
+    return (
+        filt(df_cons, scenario_code),
+        filt(df_emis, scenario_code),
+        filt(df_supply, scenario_code),
+        filt(df_supply_emis, scenario_code),
+    )
 
 def render_energy_interactive_controls(tab_name: str):
     """Interactive scenario UI for Energy tab with rich help boxes."""
@@ -991,68 +1004,177 @@ def render_energy_interactive_controls(tab_name: str):
         st.info("Sensitivity summary image not found.")
 
 
+import streamlit as st
+import pandas as pd
+from models.data_loader import load_and_prepare_excel, prepare_stacked_data, aggregate_to_periods
+from config import theme
+
+@st.cache_data(show_spinner=False)
+def _load_energy_interactive_data(scenario_code: str):
+    """Load and filter interactive energy datasets for a given scenario."""
+    df_cons = load_and_prepare_excel("data/LEAP_Demand_Cons.xlsx")
+    df_emis = load_and_prepare_excel("data/LEAP_Demand_Emissions.xlsx")
+    df_supply = load_and_prepare_excel("data/LEAP_Supply.xlsx")
+    df_supply_emis = load_and_prepare_excel("data/LEAP_Supply_Emissions.xlsx")
+
+    def filter_df(df, code):
+        if "Scenario" in df.columns:
+            mask = df["Scenario"].astype(str).str.strip() == code
+            return df.loc[mask].copy()
+        return df.copy()
+
+    return (
+        filter_df(df_cons, scenario_code),
+        filter_df(df_emis, scenario_code),
+        filter_df(df_supply, scenario_code),
+        filter_df(df_supply_emis, scenario_code),
+    )
+
+# ------------------------------------------------------------
+# Energy Tab Interactive Scenarios (fixed)
+# ------------------------------------------------------------
+@st.cache_data(show_spinner=False)
+def _load_energy_interactive_data(scenario_code: str):
+    """Load and filter interactive energy datasets for a given scenario code (AA, BB, etc.)."""
+    from models.data_loader import load_and_prepare_excel
+
+    df_cons = load_and_prepare_excel("data/LEAP_Demand_Cons.xlsx")
+    df_emis = load_and_prepare_excel("data/LEAP_Demand_Emissions.xlsx")
+    df_supply = load_and_prepare_excel("data/LEAP_Supply.xlsx")
+    df_supply_emis = load_and_prepare_excel("data/LEAP_Supply_Emissions.xlsx")
+
+    def filt(df, code):
+        if "Scenario" in df.columns:
+            mask = df["Scenario"].astype(str).str.strip() == code
+            return df.loc[mask].copy()
+        return df.copy()
+
+    return (
+        filt(df_cons, scenario_code),
+        filt(df_emis, scenario_code),
+        filt(df_supply, scenario_code),
+        filt(df_supply_emis, scenario_code),
+    )
+
+
+def render_energy_interactive_controls(tab_name: str):
+    """Interactive scenario UI for Energy tab (reactive dropdowns and charts)."""
+    st.subheader("⚡ Interactive Energy–Emissions Explorer")
+
+    with st.expander("ℹ️ About the Energy–Emissions Explorer"):
+        st.markdown("""
+        **LEAP (Low Emissions Analysis Platform)** integrates all energy demand and supply sectors, 
+        simulating energy flows, fuel generation, and emissions.  
+        Use the dropdowns below to explore different SSP and Renewables pathways.
+        """)
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        ssp = st.selectbox(
+            "Population and GDP projection (SSP)",
+            ["A", "B", "C"],
+            format_func=lambda x: {
+                "A": "A – SSP1 (NCNC)",
+                "B": "B – SSP2 (BAU)",
+                "C": "C – SSP5",
+            }[x],
+            key="ssp_select",
+        )
+
+    with col2:
+        renew = st.selectbox(
+            "Renewables uptake",
+            ["A", "B", "C"],
+            format_func=lambda x: {
+                "A": "A – Conservative",
+                "B": "B – Central (NECP-aligned)",
+                "C": "C – Optimistic",
+            }[x],
+            key="renew_select",
+        )
+
+    st.markdown(f"**Selected configuration:** Option {ssp}–{renew}")
+
+    # Always re-render charts when dropdowns change
+    render_energy_interactive_charts(tab_name, ssp, renew)
+
+
 def render_energy_interactive_charts(tab_name: str, ssp: str, renew: str):
-    """Render Energy tab charts based on SSP-Renewables scenario codes."""
-    from models.data_loader import prepare_stacked_data, aggregate_to_periods
-    
-    df_cons, df_emis = load_energy_interactive_data()
-    
-    if df_cons.empty or df_emis.empty:
-        st.warning("Energy interactive dataset not found or could not be parsed.")
-        return
-
-    # Build scenario code (e.g., "AA", "AB", "BC")
+    """Render four Energy charts matching BAU/NCNC layout."""
+    from models.data_loader import aggregate_to_periods
     scenario_code = f"{ssp}{renew}"
-    
-    # Filter consumption data
-    if "Scenario" in df_cons.columns:
-        df_cons_filtered = df_cons[df_cons["Scenario"] == scenario_code].copy()
-    else:
-        st.warning(f"'Scenario' column not found in LEAP_Demand_Cons.xlsx")
-        return
-    
-    # Filter emissions data
-    if "Scenario" in df_emis.columns:
-        df_emis_filtered = df_emis[df_emis["Scenario"] == scenario_code].copy()
-    else:
-        st.warning(f"'Scenario' column not found in LEAP_Demand_Emissions.xlsx")
+
+    df_energy, df_demand_emissions, df_energy_supply, df_supply_emissions = _load_energy_interactive_data(scenario_code)
+
+    if all(df.empty for df in [df_energy, df_demand_emissions, df_energy_supply, df_supply_emissions]):
+        st.warning(f"No data found for scenario {scenario_code}.")
         return
 
-    if df_cons_filtered.empty or df_emis_filtered.empty:
-        st.info(f"No data found for scenario {scenario_code} ({ssp}-{renew}).")
-        return
+    st.markdown(f"### Results for Option {ssp}–{renew}")
+    st.caption("Charts update automatically based on your selections.")
 
-    st.markdown(f"### Results for Option {ssp}-{renew}")
+    # --- 1️⃣ Energy consumption & emissions per sector ---
+    cols_sectors = [
+        "Residential", "Agriculture", "Industry", "Energy Products",
+        "Passenger Transportation", "Freight Transportation", "Maritime", "Services",
+    ]
 
-    # Standard sector columns
-    cols = ["Residential", "Agriculture", "Industry", "Energy Products",
-            "Passenger Transportation", "Freight Transportation",
-            "Maritime", "Services"]
+    c1, c2 = st.columns(2)
+    with c1:
+        if not df_energy.empty:
+            melted = df_energy.melt(id_vars=["Year"], value_vars=cols_sectors,
+                                    var_name="Component", value_name="Value")
+            grouped, order = aggregate_to_periods(melted, "Year", "Value", "Component", 4, "mean", "range")
+            render_bar_chart(
+                grouped, "PeriodStr", "Value", "Component",
+                "Total energy consumption per sector",
+                order,
+                y_label="ktoe",
+                key=f"int_energy_cons_{scenario_code}"
+            )
+    with c2:
+        if not df_demand_emissions.empty:
+            melted = df_demand_emissions.melt(id_vars=["Year"], value_vars=cols_sectors,
+                                              var_name="Component", value_name="Value")
+            grouped, order = aggregate_to_periods(melted, "Year", "Value", "Component", 4, "mean", "range")
+            render_bar_chart(
+                grouped, "PeriodStr", "Value", "Component",
+                "Emissions from energy consumption by sector",
+                order,
+                y_label="MtCO₂e",
+                key=f"int_energy_emis_{scenario_code}"
+            )
 
-    # Energy Consumption chart
-    melted_cons, years = prepare_stacked_data(df_cons_filtered, scenario_code, "Year", cols)
-    grouped_cons, order_cons = aggregate_to_periods(
-        melted_cons, year_col="Year", value_col="Value", component_col="Component",
-        period_years=4, agg="mean", label_mode="range"
-    )
-    render_bar_chart(
-        grouped_cons, "PeriodStr", "Value", "Component",
-        f"Energy consumption per sector ({ssp}-{renew})",
-        x_order=order_cons, 
-        y_label="ktoe",
-        key=f"energy_interactive_cons_{ssp}{renew}"
-    )
-
-    # Emissions chart
-    melted_emis, years_em = prepare_stacked_data(df_emis_filtered, scenario_code, "Year", cols)
-    grouped_emis, order_emis = aggregate_to_periods(
-        melted_emis, year_col="Year", value_col="Value", component_col="Component",
-        period_years=4, agg="mean", label_mode="range"
-    )
-    render_bar_chart(
-        grouped_emis, "PeriodStr", "Value", "Component",
-        f"Energy-related CO₂ emissions ({ssp}-{renew})",
-        x_order=order_emis,
-        y_label="MtCO₂e",
-        key=f"energy_interactive_emis_{ssp}{renew}"
-    )
+    # --- 2️⃣ Generation and fuel emissions ---
+    cols_fuels = ["Hydrogen Generation", "Electricity Generation", "Heat Generation", "Oil Refining"]
+    c3, c4 = st.columns(2)
+    with c3:
+        if not df_energy_supply.empty:
+            melted = df_energy_supply.melt(id_vars=["Year"], value_vars=cols_fuels,
+                                           var_name="Component", value_name="Value")
+            grouped, order = aggregate_to_periods(melted, "Year", "Value", "Component", 4, "mean", "range")
+            render_bar_chart(
+                grouped, "PeriodStr", "Value", "Component",
+                "Generated energy per fuel type",
+                order,
+                colors=theme.FUEL_COLORS,
+                y_label="ktoe",
+                key=f"int_energy_fuel_{scenario_code}"
+            )
+    with c4:
+        if not df_supply_emissions.empty:
+            melted = df_supply_emissions.melt(
+                id_vars=["Year"],
+                value_vars=["Electricity Generation", "Heat Generation", "Oil Refining"],
+                var_name="Component", value_name="Value",
+            )
+            grouped, order = aggregate_to_periods(melted, "Year", "Value", "Component", 4, "mean", "range")
+            render_bar_chart(
+                grouped, "PeriodStr", "Value", "Component",
+                "Emissions per fuel type",
+                order,
+                colors=theme.FUEL_COLORS,
+                y_label="MtCO₂e",
+                key=f"int_energy_fuel_emis_{scenario_code}"
+            )
