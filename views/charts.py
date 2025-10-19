@@ -1360,83 +1360,162 @@ def load_biofuels_data(path: str = "data/LEAP_biofuels.xlsx") -> dict[str, pd.Da
     return {"production": prod, "exports": exports, "combos": combos}
 
 def render_biofuels_interactive_controls(tab_name: str):
+    from views.charts import load_biofuels_data  
     st.header(f"{tab_name} — Interactive Biofuels Scenarios")
 
     with st.expander("ℹ️ About the Biofuels Explorer"):
         st.markdown("""
         Explore sensitivities in potential **production** and **export** of biofuels under different
-        assumptions for residual availability, conversion efficiency, and technology adoption rates.
+        assumptions for **residual availability**, **conversion efficiency**, and **technology adoption rates**.
         """)
 
+    # --- user selections
     col1, col2, col3 = st.columns(3)
     with col1:
-        res_opt = st.selectbox("Residual availability (%)", ["A","B","C"],
-            format_func=lambda o: {"A":"Option A – 30%","B":"Option B – 35%","C":"Option C – 40%"}[o])
+        res_opt = st.selectbox(
+            "Residual availability (%)", ["A", "B", "C"],
+            format_func=lambda o: {"A": "Option A – 30%", "B": "Option B – 35%", "C": "Option C – 40%"}[o]
+        )
     with col2:
-        coef_opt = st.selectbox("Biofuel production coefficient [L/t]", ["A","B","C"],
-            format_func=lambda o: {"A":"Option A – 340–380","B":"Option B – 380–450","C":"Option C – 450–520"}[o])
+        coef_opt = st.selectbox(
+            "Biofuel production coefficient [L/t]", ["A", "B", "C"],
+            format_func=lambda o: {"A": "Option A – 340–380", "B": "Option B – 380–450", "C": "Option C – 450–520"}[o]
+        )
     with col3:
-        tech_opt = st.selectbox("Technology adoption rate", ["A","B","C"],
-            format_func=lambda o: {"A":"Option A – slow","B":"Option B – moderate","C":"Option C – fast"}[o])
+        tech_opt = st.selectbox(
+            "Technology adoption rate", ["A", "B", "C"],
+            format_func=lambda o: {"A": "Option A – slow", "B": "Option B – moderate", "C": "Option C – fast"}[o]
+        )
 
     combo_code = f"{res_opt}-{coef_opt}-{tech_opt}"
     st.markdown(f"**Selected combination:** {combo_code}")
 
-    prod, exports, combos = load_biofuels_interactive()
-    years = [2022,2025,2030,2035,2040,2045,2050]
-    combo = combos[combos["Code"].str.lower()==combo_code.lower()]
+    # --- Load and prepare data
+    data = load_biofuels_data()
+    prod, exports, combos = data["production"], data["exports"], data["combos"]
+    years = [2022, 2025, 2030, 2035, 2040, 2045, 2050]
 
+    # --- normalize combo codes robustly
+    def _normalize_code(s):
+        """Normalize combo codes by removing spaces, converting to lowercase, and replacing odd dashes."""
+        return (
+            str(s)
+            .strip()
+            .lower()
+            .replace("–", "-")
+            .replace("—", "-")
+            .replace(" ", "")
+        )
+
+    combo_code_clean = _normalize_code(combo_code)
+    combos["CodeClean"] = combos["Code"].apply(_normalize_code)
+
+    # Debug info
+    st.write("🧾 Debug — normalized codes:", combos["CodeClean"].unique().tolist())
+    st.write("🔍 Selected code (normalized):", combo_code_clean)
+
+    combo = combos[combos["CodeClean"] == combo_code_clean]
     if combo.empty:
-        st.warning(f"No data found for combination {combo_code}.")
-        return
+        # fallback to nearest match
+        partial_matches = [c for c in combos["CodeClean"] if c.startswith(combo_code_clean[:-1])]
+        if partial_matches:
+            fallback = partial_matches[0]
+            st.info(f"No exact match for {combo_code_clean}; using nearest {fallback.upper()} instead.")
+            combo = combos[combos["CodeClean"] == fallback]
+        else:
+            st.warning(f"No data found for combination {combo_code}.")
+            return
 
-    # extract baseline arrays
-    min_prod = prod.iloc[0,1:].to_numpy()
-    max_prod = prod.iloc[1,1:].to_numpy()
-    dem_bau = prod.iloc[2,1:].to_numpy()
+    # --- Extract baseline arrays
+    min_prod = prod.iloc[0, 1:].to_numpy()
+    max_prod = prod.iloc[1, 1:].to_numpy()
+    dem_bau  = prod.iloc[2, 1:].to_numpy()
 
+    # ==================================================
+    # (a) DEMAND vs POTENTIAL SUPPLY
+    # ==================================================
     col1, col2 = st.columns(2)
-    # --- left chart
     with col1:
+        min_len = min(len(min_prod), len(max_prod), len(years))
         bars = pd.DataFrame({
-            "Year": years*2,
-            "Component": (["Minimum Production Potential [ktoe]"]*7)+(["Maximum Production Potential [ktoe]"]*7),
-            "Value": list(min_prod)+list(max_prod),
+            "Year": years[:min_len] * 2,
+            "Component": (["Minimum Production Potential [ktoe]"] * min_len)
+                       + (["Maximum Production Potential [ktoe]"] * min_len),
+            "Value": list(min_prod[:min_len]) + list(max_prod[:min_len]),
         })
-        fig = px.bar(bars, x="Year", y="Value", color="Component",
-                     color_discrete_map={
-                         "Minimum Production Potential [ktoe]":"#93c5fd",
-                         "Maximum Production Potential [ktoe]":"#2563eb"})
+
+        fig = px.bar(
+            bars, x="Year", y="Value", color="Component",
+            color_discrete_map={
+                "Minimum Production Potential [ktoe]": "#93c5fd",
+                "Maximum Production Potential [ktoe]": "#2563eb"
+            }
+        )
+
         fig.add_trace(go.Scatter(
-            x=years, y=dem_bau, mode="lines+markers",
-            name="Demand (Baseline) [ktoe]", line=dict(color="#ef4444", width=2)))
+            x=years[:min_len], y=dem_bau[:min_len],
+            mode="lines+markers",
+            name="Demand (Baseline) [ktoe]",
+            line=dict(color="#ef4444", width=2)
+        ))
         fig.add_trace(go.Scatter(
             x=combo["Year"], y=combo["Selected Production Potential (ktoe)"],
             mode="lines+markers", name=f"Production ({combo_code})",
-            line=dict(color="#10b981", width=2, dash="dot")))
-        fig.update_layout(title=f"Biofuels demand vs potential supply ({combo_code})",
-                          barmode="group", xaxis_title="Year", yaxis_title="ktoe",
-                          width=theme.CHART_WIDTH, height=theme.CHART_HEIGHT)
+            line=dict(color="#10b981", width=2, dash="dot")
+        ))
+
+        fig.update_layout(
+            title=f"Biofuels demand vs potential supply ({combo_code})",
+            barmode="group",
+            xaxis_title="Year",
+            yaxis_title="ktoe",
+            width=theme.CHART_WIDTH,
+            height=theme.CHART_HEIGHT
+        )
         st.plotly_chart(fig, use_container_width=False)
 
-    # --- right chart
+    # ==================================================
+    # (b) POTENTIAL FOR EXPORT
+    # ==================================================
     with col2:
+        # --- compute export potentials and align array lengths
         export_min = (min_prod - dem_bau).clip(min=0)
         export_max = (max_prod - dem_bau).clip(min=0)
+        min_len2 = min(len(export_min), len(export_max), len(years))
+
+        # --- build export DataFrame
         bars2 = pd.DataFrame({
-            "Year": years*2,
-            "Component": (["Min export potential [ktoe]"]*7)+(["Max export potential [ktoe]"]*7),
-            "Value": list(export_min)+list(export_max),
+            "Year": years[:min_len2] * 2,
+            "Component": (["Min export potential [ktoe]"] * min_len2)
+                       + (["Max export potential [ktoe]"] * min_len2),
+            "Value": list(export_min[:min_len2]) + list(export_max[:min_len2]),
         })
-        fig2 = px.bar(bars2, x="Year", y="Value", color="Component",
-                      color_discrete_map={
-                          "Min export potential [ktoe]":"#86efac",
-                          "Max export potential [ktoe]":"#22c55e"})
+
+        fig2 = px.bar(
+            bars2,
+            x="Year",
+            y="Value",
+            color="Component",
+            color_discrete_map={
+                "Min export potential [ktoe]": "#a7f3d0",
+                "Max export potential [ktoe]": "#047857",
+            },
+        )
+
         fig2.add_trace(go.Scatter(
-            x=combo["Year"], y=combo["Selected Export Potential (ktoe)"],
-            mode="lines+markers", name=f"Export ({combo_code})",
-            line=dict(color="#166534", width=2, dash="dot")))
-        fig2.update_layout(title=f"Potential for Biofuels Export ({combo_code})",
-                           barmode="group", xaxis_title="Year", yaxis_title="ktoe",
-                           width=theme.CHART_WIDTH, height=theme.CHART_HEIGHT)
+            x=combo["Year"],
+            y=combo["Selected Export Potential (ktoe)"],
+            mode="lines+markers",
+            name=f"Export ({combo_code})",
+            line=dict(color="#166534", width=2, dash="dot")
+        ))
+
+        fig2.update_layout(
+            title=f"Potential for Biofuels Export ({combo_code})",
+            barmode="group",
+            xaxis_title="Year",
+            yaxis_title="ktoe",
+            width=theme.CHART_WIDTH,
+            height=theme.CHART_HEIGHT
+        )
         st.plotly_chart(fig2, use_container_width=False)
