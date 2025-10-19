@@ -84,20 +84,6 @@ if LOGO_PATH.exists():
 # ---------------------------------------------------------------------
 # Data loaders
 # ---------------------------------------------------------------------
-@st.cache_data(show_spinner=False)
-def load_biofuels_simple(path: str = "data/LEAP_Biofuels.xlsx", sheet: str = "Biofuels") -> pd.DataFrame:
-    df = pd.read_excel(path, sheet_name=sheet)
-    df = df.rename(columns={c: str(c).strip() for c in df.columns})
-    required = ["Year", "MinProd_ktoe", "MaxProd_ktoe", "Demand_BAU_ktoe", "Demand_NCNC_ktoe"]
-    missing = [c for c in required if c not in df.columns]
-    if missing:
-        raise ValueError(f"Missing columns in '{sheet}': {missing}")
-    df["Year"] = pd.to_numeric(df["Year"], errors="coerce").astype("Int64")
-    for c in df.columns:
-        if c != "Year":
-            df[c] = pd.to_numeric(df[c], errors="coerce")
-    return df
-
 
 @st.cache_data(show_spinner=False)
 def load_maritime_base(path: str = "data/Maritime_results_all_scenarios.xlsx", sheet: str = "base") -> pd.DataFrame:
@@ -130,7 +116,6 @@ def load_cap_series(path: str) -> pd.DataFrame:
     out["CO2_Cap"] = pd.to_numeric(out["CO2_Cap"], errors="coerce")
     return out.dropna(subset=["Year", "CO2_Cap"]).sort_values("Year")
 
-
 # ---------------------------------------------------------------------
 # Load all datasets
 # ---------------------------------------------------------------------
@@ -142,7 +127,7 @@ df_demand_emissions = load_and_prepare_excel("data/LEAP_Demand_Emissions.xlsx")
 df_energy_supply = load_and_prepare_excel("data/LEAP_Supply.xlsx")
 df_supply_emissions = load_and_prepare_excel("data/LEAP_Supply_Emissions.xlsx")
 df_energy_balance = load_energy_balance("data/LEAP_Energy_Balance.xlsx")
-df_biofuels = load_biofuels_simple("data/LEAP_Biofuels.xlsx")
+df_biofuels = load_and_prepare_excel("data/LEAP_Biofuels.xlsx")
 
 # ---------------------------------------------------------------------
 # Scenario selection
@@ -334,9 +319,7 @@ with tab_energy:
     # --- Handle INTERACTIVE scenario separately ---
     if scen == "INTERACTIVE":
         from views.charts import render_energy_interactive_controls
-        render_energy_interactive_controls("Energy Emissions")
-        st.stop()  # prevent BAU/NCNC charts from rendering below
-
+        render_energy_interactive_controls("Energy Emissions")   
     # ---------------------------------------------------------------------
     # SCENARIOS: BAU / NCNC (existing charts)
     # ---------------------------------------------------------------------
@@ -500,114 +483,159 @@ with tab_energy:
     except Exception as e:
         st.error(f"Failed to build Sankey: {e}")
 
+@st.cache_data(show_spinner=False)
+def load_biofuels_data(path: str = "data/LEAP_Biofuels.xlsx") -> pd.DataFrame:
+    """Load and tidy the 'Custom combinations from user' Biofuels sheet (Options A-A-A, B-B-B)."""
+    df_raw = pd.read_excel(path, sheet_name="Custom combinations from user", header=None)
+
+    # Find option block start rows
+    option_rows = df_raw.index[df_raw.iloc[:, 0].astype(str).str.contains("Option", na=False)].tolist()
+    if not option_rows:
+        st.error("❌ Could not find any 'Option' rows in Biofuels sheet.")
+        return pd.DataFrame()
+
+    blocks = []
+    for i, start in enumerate(option_rows):
+        label = str(df_raw.iloc[start, 0]).strip()
+        end = option_rows[i + 1] if i + 1 < len(option_rows) else len(df_raw)
+        header_row = start + 1
+        if header_row >= len(df_raw):
+            continue
+
+        headers = df_raw.iloc[header_row].tolist()
+        data_start = header_row + 1
+        block = df_raw.iloc[data_start:end].copy().dropna(how="all")
+        if block.empty:
+            continue
+
+        block.columns = [str(h).strip() for h in headers]
+        block["ScenarioOption"] = label
+        blocks.append(block)
+
+    if not blocks:
+        st.warning("⚠️ No data blocks parsed from Biofuels sheet.")
+        return pd.DataFrame()
+
+    df = pd.concat(blocks, ignore_index=True)
+    df.columns = [str(c).strip() for c in df.columns]
+
+    # Extract scenario letters (A/B/C)
+    pat = r"Option\s*([A-C])\-([A-C])\-([A-C])"
+    df[["PopOpt", "DietOpt", "ProdOpt"]] = df["ScenarioOption"].str.extract(pat)
+
+    # Convert numeric columns where possible
+    for c in df.columns:
+        if c not in ["ScenarioOption", "PopOpt", "DietOpt", "ProdOpt"]:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    return df
+
 with tab9:
     scen = (selected_scenario or "").strip().upper()
 
-    # Scenario-specific explainer first
+    # Scenario-specific explainer (optional Markdown)
     scen_file = BASE_DIR / "content" / f"biofuels_explainer_{scen}.md"
     default_file = BASE_DIR / "content" / "biofuels_explainer.md"
 
+    text = None
     if scen_file.exists():
         text = scen_file.read_text(encoding="utf-8")
-        if text.strip():
-            st.markdown(text, unsafe_allow_html=True)
-        else:
-            st.warning(f"{scen_file.name} is empty.")
     elif default_file.exists():
         text = default_file.read_text(encoding="utf-8")
-        if text.strip():
-            st.markdown(text, unsafe_allow_html=True)
-        else:
-            st.warning("biofuels_explainer.md is empty.")
+
+    if text:
+        st.markdown(text, unsafe_allow_html=True)
+
+    # --- INTERACTIVE MODE ---
+    if scen == "INTERACTIVE":
+        from views.charts import render_biofuels_interactive_controls
+        render_biofuels_interactive_controls("Biofuels")
+
+    # --- NON-INTERACTIVE MODES (BAU / NCNC) ---
     else:
-        st.warning(f"No biofuels explainer found for scenario {scen} or default.")
+        scen_key = "BAU" if scen == "BAU" else "NCNC"
 
-    scen_key = "BAU" if scen == "BAU" else "NCNC"  # default to NCNC for anything else
+        # --------------------------------------------------
+        # Load biofuels data from the Excel file
+        # --------------------------------------------------
+        from views.charts import load_biofuels_data
+        import plotly.express as px
+        import pandas as pd
 
-    # -----------------------------
-    # Side-by-side layout for biofuels charts
-    # -----------------------------
-    col1, col2 = st.columns(2)
+        data = load_biofuels_data("data/LEAP_biofuels.xlsx")
+        prod, exports = data["production"], data["exports"]
 
-    # a) Demand vs Potential Supply
-    with col1:
-        # Bars: Min/Max production potential
-        bar_long = (
-            df_biofuels
-            .melt(id_vars=["Year"], value_vars=["MinProd_ktoe", "MaxProd_ktoe"],
-                  var_name="Component", value_name="Value")
-            .replace({"Component": {
+        # --------------------------------------------------
+        # Layout: two columns
+        # --------------------------------------------------
+        col1, col2 = st.columns(2)
+
+        # ==================================================
+        # (a) DEMAND vs POTENTIAL SUPPLY
+        # ==================================================
+        with col1:
+            demand_col = "Demand_BAU_ktoe" if scen_key == "BAU" else "Demand_NCNC_ktoe"
+
+            bars = prod.melt(
+                id_vars=["Year"],
+                value_vars=["MinProd_ktoe", "MaxProd_ktoe"],
+                var_name="Component",
+                value_name="Value"
+            )
+            bars["Component"] = bars["Component"].replace({
                 "MinProd_ktoe": "Minimum Production Potential [ktoe]",
                 "MaxProd_ktoe": "Maximum Production Potential [ktoe]",
-            }})
-        )
-
-        # Line: chosen demand series
-        demand_col = "Demand_BAU_ktoe" if scen_key == "BAU" else "Demand_NCNC_ktoe"
-        line_long = (
-            df_biofuels[["Year", demand_col]]
-            .rename(columns={demand_col: "Value"})
-            .assign(Component=f"Demand ({'Baseline' if scen_key=='BAU' else 'NECP'}) [ktoe]")
-        )
-
-        render_grouped_bar_and_line(
-            prod_df=bar_long,
-            demand_df=line_long,
-            x_col="Year",
-            y_col="Value",
-            category_col="Component",
-            title=f"Biofuels demand vs potential supply ({scen_key})",
-            height=theme.CHART_HEIGHT,
-            y_label="ktoe",
-            key="biofuels_demand_supply"
-        )
-
-    # b) Potential for Biofuels Export
-    with col2:
-        # Prefer explicit export cols; otherwise compute from potential − demand
-        if scen_key == "BAU":
-            col_min_exp, col_max_exp = "ExportMin_BAU_ktoe", "ExportMax_BAU_ktoe"
-        else:
-            col_min_exp, col_max_exp = "ExportMin_NCNC_ktoe", "ExportMax_NCNC_ktoe"
-
-        have_explicit = (col_min_exp in df_biofuels.columns) and (col_max_exp in df_biofuels.columns)
-        if have_explicit and (df_biofuels[[col_min_exp, col_max_exp]].notna().any().any()):
-            min_export = df_biofuels[col_min_exp].fillna(0)
-            max_export = df_biofuels[col_max_exp].fillna(0)
-        else:
-            dem = df_biofuels[demand_col].fillna(0)
-            min_export = (df_biofuels["MinProd_ktoe"].fillna(0) - dem).clip(lower=0)
-            max_export = (df_biofuels["MaxProd_ktoe"].fillna(0) - dem).clip(lower=0)
-
-        export_long = (
-            pd.DataFrame({
-                "Year": df_biofuels["Year"].astype(int),
-                "Min export potential [ktoe]": min_export,
-                "Max export potential [ktoe]": max_export,
             })
-            .melt(id_vars=["Year"], var_name="Component", value_name="Value")
-        )
 
-        fig = go.Figure()
-        for comp, color in [
-            ("Min export potential [ktoe]", "#86efac"),
-            ("Max export potential [ktoe]", "#22c55e"),
-        ]:
-            sub = export_long[export_long["Component"] == comp]
-            fig.add_trace(go.Bar(x=sub["Year"], y=sub["Value"], name=comp, marker_color=color))
+            line = prod[["Year", demand_col]].rename(columns={demand_col: "Value"})
+            line["Component"] = "Biofuel Demand [ktoe]"
 
-        fig.update_layout(
-            title=f"Potential for Biofuels Export ({scen_key})",
-            barmode="group",
-            xaxis_title="Year",
-            yaxis_title="ktoe",
-            width=theme.CHART_WIDTH,
-            height=theme.CHART_HEIGHT,
-            margin=dict(t=60, r=10, b=10, l=10),
-            legend_title_text="Series",
-        )
-        st.plotly_chart(fig, use_container_width=False, key="biofuels_export")
-         
+            render_grouped_bar_and_line(
+                prod_df=bars,
+                demand_df=line,
+                x_col="Year",
+                y_col="Value",
+                category_col="Component",
+                title=f"Biofuels Demand vs Potential Supply ({scen_key})",
+                height=theme.CHART_HEIGHT,
+                y_label="ktoe",
+                key=f"biofuels_demand_supply_{scen_key.lower()}",
+            )
+
+        # ==================================================
+        # (b) POTENTIAL FOR EXPORT
+        # ==================================================
+        with col2:
+            exp_min_col = "MinExport_BAU_ktoe" if scen_key == "BAU" else "MinExport_NCNC_ktoe"
+            exp_max_col = "MaxExport_BAU_ktoe" if scen_key == "BAU" else "MaxExport_NCNC_ktoe"
+
+            exp_df = exports.melt(
+                id_vars=["Year"],
+                value_vars=[exp_min_col, exp_max_col],
+                var_name="Component",
+                value_name="Value"
+            )
+            exp_df["Component"] = exp_df["Component"].replace({
+                exp_min_col: "Min export potential [ktoe]",
+                exp_max_col: "Max export potential [ktoe]",
+            })
+
+            fig2 = px.bar(
+                exp_df,
+                x="Year",
+                y="Value",
+                color="Component",
+                color_discrete_map={
+                    "Min export potential [ktoe]": "#86efac",
+                    "Max export potential [ktoe]": "#22c55e",
+                },
+                title=f"Potential for Biofuels Export ({scen_key})",
+                barmode="group",
+                width=theme.CHART_WIDTH,
+                height=theme.CHART_HEIGHT,
+            )
+            st.plotly_chart(fig2, use_container_width=False, key=f"biofuels_export_{scen_key.lower()}")
+       
 with tab10:
     # Load scenario-specific explainer if it exists
     text = load_scenario_md("ships_explainer", selected_scenario)
