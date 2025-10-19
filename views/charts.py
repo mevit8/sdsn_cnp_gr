@@ -8,7 +8,6 @@ from config import theme
 import pandas as pd
 from pathlib import Path
 
-
 ColorSpec = Union[Dict[str, str], List[str], None]
 
 # -----------------------------
@@ -995,7 +994,7 @@ def render_energy_interactive_controls(tab_name: str):
 
     st.markdown("---")
     st.subheader("📈 Sensitivity Summary")
-    sens_img = Path("content/energy_sensitivity.png")
+    sens_img = Path("content/leap_sensitivity.png")
     if sens_img.exists():
         with st.expander("Show sensitivity summary", expanded=False):
             st.image(str(sens_img), width=600)
@@ -1056,7 +1055,6 @@ def _load_energy_interactive_data(scenario_code: str):
         filt(df_supply_emis, scenario_code),
     )
 
-
 def render_energy_interactive_controls(tab_name: str):
     """Interactive scenario UI for Energy tab (reactive dropdowns and charts)."""
     st.subheader("⚡ Interactive Energy–Emissions Explorer")
@@ -1067,7 +1065,6 @@ def render_energy_interactive_controls(tab_name: str):
         simulating energy flows, fuel generation, and emissions.  
         Use the dropdowns below to explore different SSP and Renewables pathways.
         """)
-
     col1, col2 = st.columns(2)
 
     with col1:
@@ -1098,6 +1095,22 @@ def render_energy_interactive_controls(tab_name: str):
 
     # Always re-render charts when dropdowns change
     render_energy_interactive_charts(tab_name, ssp, renew)
+
+    # ------------------------------------------------------------------
+    # 📈 Sensitivity Summary (identical structure to Food–Land)
+    # ------------------------------------------------------------------
+    st.markdown("---")
+    st.subheader("📈 Sensitivity Summary")
+
+    sensitivity_image_path = Path("content/leap_sensitivity.png")
+
+    if sensitivity_image_path.exists():
+        with st.expander("📊 Show sensitivity summary figure", expanded=False):
+            st.image(str(sensitivity_image_path), use_container_width=True)
+            st.caption("Sensitivity summary for LEAP Energy interactive scenarios (Sheet2 of LEAP Excel files).")
+    else:
+        st.info("Sensitivity summary image not found. Please add 'content/leap_sensitivity.png'.")
+
 
 
 def render_energy_interactive_charts(tab_name: str, ssp: str, renew: str):
@@ -1178,3 +1191,43 @@ def render_energy_interactive_charts(tab_name: str, ssp: str, renew: str):
                 y_label="MtCO₂e",
                 key=f"int_energy_fuel_emis_{scenario_code}"
             )
+# ------------------------------------------------------------
+# Energy Sensitivity Summary (Sheet2)
+# ------------------------------------------------------------
+import plotly.express as px
+
+@st.cache_data(show_spinner=False)
+def _load_energy_sensitivity_sheets() -> dict[str, pd.DataFrame]:
+    """Load Sheet2 from the four LEAP Energy Excel files."""
+    paths = {
+        "cons": "data/LEAP_Demand_Cons.xlsx",
+        "emis": "data/LEAP_Demand_Emissions.xlsx",
+        "supply": "data/LEAP_Supply.xlsx",
+        "supply_emis": "data/LEAP_Supply_Emissions.xlsx",
+    }
+    out = {}
+    for key, p in paths.items():
+        try:
+            df = pd.read_excel(p, sheet_name="Sheet2")
+            df.columns = df.columns.map(str).str.strip()
+            if "Scenario" in df.columns:
+                df["Scenario"] = df["Scenario"].astype(str).str.strip().str.upper()
+            out[key] = df
+        except Exception as e:
+            st.warning(f"⚠️ Could not load Sheet2 from {p}: {e}")
+            out[key] = pd.DataFrame()
+    return out
+
+
+def render_energy_sensitivity_summary():
+    """Display collapsible sensitivity summary image (bottom of Energy tab)."""
+    st.markdown("---")
+    st.subheader("📈 Sensitivity Summary")
+
+    img_path = Path("content/leap_sensitivity.png")
+
+    if img_path.exists():
+        with st.expander("📊 Show sensitivity summary figure", expanded=False):
+            st.image(str(img_path), width=800, caption="LEAP Energy sensitivity summary (Sheet2 of LEAP Excel files).")
+    else:
+        st.info("Sensitivity summary image not found. Please add 'content/leap_sensitivity.png'.")
