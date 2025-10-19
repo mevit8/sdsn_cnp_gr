@@ -1116,45 +1116,104 @@ def _load_energy_interactive_data(scenario_code: str):
     )
 
 def render_energy_interactive_controls(tab_name: str):
-    """Interactive scenario UI for Energy tab (reactive dropdowns and charts)."""
+    """Interactive scenario UI for Energy tab with concise help tooltips (❓ icons)."""
     st.subheader("⚡ Interactive Energy–Emissions Explorer")
 
     with st.expander("ℹ️ About the Energy–Emissions Explorer"):
         st.markdown("""
-        **LEAP (Low Emissions Analysis Platform)** integrates all energy demand and supply sectors, 
-        simulating energy flows, fuel generation, and emissions.  
-        Use the dropdowns below to explore different SSP and Renewables pathways.
+        **LEAP (Low Emissions Analysis Platform)** integrates all energy demand and supply sectors,
+        simulating energy flows, fuel generation, and resulting emissions.
+        
+        Use the dropdowns below to explore how **population, GDP growth, and renewables uptake** 
+        affect Greece's energy and emissions pathways to 2050.
         """)
+
     col1, col2 = st.columns(2)
 
+    # -------------------------------------------------------------------------
+    # Population & GDP projections dropdown
+    # -------------------------------------------------------------------------
     with col1:
         ssp = st.selectbox(
-            "Population and GDP projection (SSP)",
-            ["A", "B", "C"],
+            "Population & GDP projections to 2050:",
+            options=["A", "B", "C"],
             format_func=lambda x: {
-                "A": "A – SSP1 (NCNC)",
-                "B": "B – SSP2 (BAU)",
-                "C": "C – SSP5",
+                "A": "Option A – SSP1 (NCNC)",
+                "B": "Option B – SSP2 (BAU)",
+                "C": "Option C – SSP5",
             }[x],
+            help=(
+                "**Population and GDP projections to 2050:**\n\n"
+                "**Option A – SSP1 (NCNC):**\n"
+                "Under the SSP1 (“strong societal sustainability and environmental consciousness”) scenario, "
+                "Greece's population is projected to decline substantially (~14% by 2050 vs. 2021). "
+                "GDP growth averages **2.0–2.5%/yr**.\n\n"
+                "**Option B – SSP2 (BAU):**\n"
+                "Under the SSP2 ('middle of the road') scenario, Greece's population declines more sharply "
+                "(~24% by 2100), with moderate fertility, mortality, and migration. "
+                "GDP grows **1.9–2.2%/yr**.\n\n"
+                "**Option C – SSP5:**\n"
+                "An “extreme rapid development” case: high tech progress and global integration, "
+                "but population declines up to 40% by 2100. GDP growth **2.3–2.5%/yr**."
+            ),
             key="ssp_select",
         )
 
+    # -------------------------------------------------------------------------
+    # Renewables uptake dropdown
+    # -------------------------------------------------------------------------
     with col2:
         renew = st.selectbox(
-            "Renewables uptake",
-            ["A", "B", "C"],
+            "Renewables uptake to 2050:",
+            options=["A", "B", "C"],
             format_func=lambda x: {
-                "A": "A – Conservative",
-                "B": "B – Central (NECP-aligned)",
-                "C": "C – Optimistic",
+                "A": "Option A – Conservative baseline",
+                "B": "Option B – Central (market-driven)",
+                "C": "Option C – Optimistic (fast cost declines)",
             }[x],
+            help=(
+                "**Renewables uptake to 2050:**\n\n"
+                "**Option A – Conservative baseline:**\n"
+                "Slower market and technology uptake due to grid integration and permitting limits. "
+                "Solar +0.4 %/yr, wind +0.2 %/yr.\n\n"
+                "**Option B – Central (plausible market-driven baseline):**\n"
+                "Reflects Greece’s rapid PV rollout (up to end of 2023) and moderate global cost declines. "
+                "Aligned with NECP baseline: solar +0.6 %/yr, wind +0.4 %/yr, hydropower steady.\n\n"
+                "**Option C – Optimistic baseline:**\n"
+                "Fast uptake with fewer constraints (grid, permitting, storage). "
+                "Solar +0.8 %/yr, wind +0.6 %/yr."
+            ),
             key="renew_select",
         )
 
+    # -------------------------------------------------------------------------
+    # Baseline note (shared context)
+    # -------------------------------------------------------------------------
+    st.markdown("""
+    In all cases, renewables shares follow NECP projections:
+    - **Residential sector:** electrification +15 % by 2050  
+    - **Transport sector:** ~10 % by 2050  
+    - **Oil refining activity:** decreasing by 2050  
+
+    The **NCNC (SSP1)** pathway includes additional sustainability measures from the NECP.
+    """)
+
     st.markdown(f"**Selected configuration:** Option {ssp}–{renew}")
 
-    # Always re-render charts when dropdowns change
+    # --- Render charts dynamically
     render_energy_interactive_charts(tab_name, ssp, renew)
+
+    # --- Sensitivity Summary (unchanged)
+    st.markdown("---")
+    st.subheader("📈 Sensitivity Summary")
+    sens_img = Path("content/leap_sensitivity.png")
+    if sens_img.exists():
+        with st.expander("Show sensitivity summary", expanded=False):
+            st.image(str(sens_img), width=600)
+            st.caption("Relative contribution of SSP and renewables uptake assumptions.")
+    else:
+        st.info("Sensitivity summary image not found.")
+
 
     # ------------------------------------------------------------------
     # 📈 Sensitivity Summary (identical structure to Food–Land)
@@ -1358,9 +1417,53 @@ def load_biofuels_data(path: str = "data/LEAP_biofuels.xlsx") -> dict[str, pd.Da
     })
 
     return {"production": prod, "exports": exports, "combos": combos}
+# ---------------------------------------------------------------------
+# Interactive Biofuels helper dictionaries
+# ---------------------------------------------------------------------
+def get_biofuels_option_sets():
+    """Return mapping dictionaries and descriptions for interactive selectors."""
+    sets = {
+        "residual": {
+            "title": "– Residual Availability",
+            "description": (
+                "This is the amount of production residuals (corn, sugarbeets, sunflowers, olives, wheat) "
+                "that can be used for biofuels production, without affecting agricultural production. "
+                "Primarily derived from the FABLE Calculator."
+            ),
+            "options": {
+                "A": "Option A – minimum (30%)",
+                "B": "Option B – average (35%)",
+                "C": "Option C – maximum (40%)",
+            },
+        },
+        "coefficient": {
+            "title": "– Biofuel Production Coefficient [L/t]",
+            "description": (
+                "Liters of biofuel produced per ton of crop, based on empirical data and studies."
+            ),
+            "options": {
+                "A": "Option A – minimum (340–380)",
+                "B": "Option B – average (380–450)",
+                "C": "Option C – maximum (450–520)",
+            },
+        },
+        "technology": {
+            "title": "– Technology Adoption Rate",
+            "description": (
+                "Reflects the mandated fuels blending uptake per national commitments, "
+                "driving bioethanol and biodiesel use by 2050. Derived from LEAP outputs."
+            ),
+            "options": {
+                "A": "Option A – slow",
+                "B": "Option B – moderate",
+                "C": "Option C – fast",
+            },
+        },
+    }
+    return sets
 
 def render_biofuels_interactive_controls(tab_name: str):
-    from views.charts import load_biofuels_data  
+    from views.charts import load_biofuels_data, _render_biofuels_base_chart
     st.header(f"{tab_name} — Interactive Biofuels Scenarios")
 
     with st.expander("ℹ️ About the Biofuels Explorer"):
@@ -1369,54 +1472,63 @@ def render_biofuels_interactive_controls(tab_name: str):
         assumptions for **residual availability**, **conversion efficiency**, and **technology adoption rates**.
         """)
 
-    # --- user selections
+    sets = get_biofuels_option_sets()
     col1, col2, col3 = st.columns(3)
+
     with col1:
         res_opt = st.selectbox(
-            "Residual availability (%)", ["A", "B", "C"],
-            format_func=lambda o: {"A": "Option A – 30%", "B": "Option B – 35%", "C": "Option C – 40%"}[o]
+            "Residual Availability",
+            options=list(sets["residual"]["options"].keys()),
+            format_func=lambda o: sets["residual"]["options"][o],
+            help=(
+                f"**{sets['residual']['title']}**\n\n"
+                + sets['residual']['description']
+                + "\n\n"
+                + "\n".join([f"- {v}" for v in sets['residual']['options'].values()])
+            ),
         )
+
     with col2:
         coef_opt = st.selectbox(
-            "Biofuel production coefficient [L/t]", ["A", "B", "C"],
-            format_func=lambda o: {"A": "Option A – 340–380", "B": "Option B – 380–450", "C": "Option C – 450–520"}[o]
+            "Biofuel Production Coefficient [L/t]",
+            options=list(sets["coefficient"]["options"].keys()),
+            format_func=lambda o: sets["coefficient"]["options"][o],
+            help=(
+                f"**{sets['coefficient']['title']}**\n\n"
+                + sets['coefficient']['description']
+                + "\n\n"
+                + "\n".join([f"- {v}" for v in sets['coefficient']['options'].values()])
+            ),
         )
+
     with col3:
         tech_opt = st.selectbox(
-            "Technology adoption rate", ["A", "B", "C"],
-            format_func=lambda o: {"A": "Option A – slow", "B": "Option B – moderate", "C": "Option C – fast"}[o]
+            "Technology Adoption Rate",
+            options=list(sets["technology"]["options"].keys()),
+            format_func=lambda o: sets["technology"]["options"][o],
+            help=(
+                f"**{sets['technology']['title']}**\n\n"
+                + sets['technology']['description']
+                + "\n\n"
+                + "\n".join([f"- {v}" for v in sets['technology']['options'].values()])
+            ),
         )
 
     combo_code = f"{res_opt}-{coef_opt}-{tech_opt}"
-    st.markdown(f"**Selected combination:** {combo_code}")
+    st.markdown(f"**Selected combination:** {combo_code}**")
 
-    # --- Load and prepare data
+    # --- Load and plot
     data = load_biofuels_data()
     prod, exports, combos = data["production"], data["exports"], data["combos"]
-    years = [2022, 2025, 2030, 2035, 2040, 2045, 2050]
 
-    # --- normalize combo codes robustly
     def _normalize_code(s):
-        """Normalize combo codes by removing spaces, converting to lowercase, and replacing odd dashes."""
-        return (
-            str(s)
-            .strip()
-            .lower()
-            .replace("–", "-")
-            .replace("—", "-")
-            .replace(" ", "")
-        )
+        return str(s).strip().lower().replace("–", "-").replace("—", "-").replace(" ", "")
 
     combo_code_clean = _normalize_code(combo_code)
     combos["CodeClean"] = combos["Code"].apply(_normalize_code)
 
-    # Debug info
-    st.write("🧾 Debug — normalized codes:", combos["CodeClean"].unique().tolist())
-    st.write("🔍 Selected code (normalized):", combo_code_clean)
-
     combo = combos[combos["CodeClean"] == combo_code_clean]
     if combo.empty:
-        # fallback to nearest match
         partial_matches = [c for c in combos["CodeClean"] if c.startswith(combo_code_clean[:-1])]
         if partial_matches:
             fallback = partial_matches[0]
@@ -1426,96 +1538,85 @@ def render_biofuels_interactive_controls(tab_name: str):
             st.warning(f"No data found for combination {combo_code}.")
             return
 
-    # --- Extract baseline arrays
-    min_prod = prod.iloc[0, 1:].to_numpy()
-    max_prod = prod.iloc[1, 1:].to_numpy()
-    dem_bau  = prod.iloc[2, 1:].to_numpy()
+    combo_line = combo[["Year", "Selected Production Potential (ktoe)"]].rename(
+        columns={"Selected Production Potential (ktoe)": "Value"}
+    )
+    combo_line["Component"] = f"Biofuel Production ({combo_code})"
 
-    # ==================================================
-    # (a) DEMAND vs POTENTIAL SUPPLY
-    # ==================================================
+    _render_biofuels_base_chart(prod, exports, scen_key="BAU", line_override=combo_line)
+
+        
+def _render_biofuels_base_chart(prod: pd.DataFrame, exports: pd.DataFrame,
+                                scen_key: str, line_override: pd.DataFrame | None = None):
+    """Render the standard Biofuels charts (bars + line overlay) reused by BAU/NCNC and interactive tabs."""
+    import plotly.express as px
+    from config import theme
+    import streamlit as st
+
     col1, col2 = st.columns(2)
+
+    # --- Demand vs Potential Supply ---
     with col1:
-        min_len = min(len(min_prod), len(max_prod), len(years))
-        bars = pd.DataFrame({
-            "Year": years[:min_len] * 2,
-            "Component": (["Minimum Production Potential [ktoe]"] * min_len)
-                       + (["Maximum Production Potential [ktoe]"] * min_len),
-            "Value": list(min_prod[:min_len]) + list(max_prod[:min_len]),
+        demand_col = f"Demand_{scen_key}_ktoe"
+        bars = prod.melt(
+            id_vars=["Year"],
+            value_vars=["MinProd_ktoe", "MaxProd_ktoe"],
+            var_name="Component",
+            value_name="Value"
+        )
+        bars["Component"] = bars["Component"].replace({
+            "MinProd_ktoe": "Minimum Production Potential [ktoe]",
+            "MaxProd_ktoe": "Maximum Production Potential [ktoe]",
         })
 
-        fig = px.bar(
-            bars, x="Year", y="Value", color="Component",
-            color_discrete_map={
-                "Minimum Production Potential [ktoe]": "#93c5fd",
-                "Maximum Production Potential [ktoe]": "#2563eb"
-            }
+        line = prod[["Year", demand_col]].rename(columns={demand_col: "Value"})
+        line["Component"] = "Biofuel Demand [ktoe]"
+
+        # use override if provided
+        if line_override is not None:
+            line = line_override
+
+        from views.charts import render_grouped_bar_and_line
+        render_grouped_bar_and_line(
+            prod_df=bars,
+            demand_df=line,
+            x_col="Year",
+            y_col="Value",
+            category_col="Component",
+            title=f"Biofuels Demand vs Potential Supply ({scen_key})",
+            height=theme.CHART_HEIGHT,
+            y_label="ktoe",
+            key=f"biofuels_demand_supply_{scen_key.lower()}",
         )
 
-        fig.add_trace(go.Scatter(
-            x=years[:min_len], y=dem_bau[:min_len],
-            mode="lines+markers",
-            name="Demand (Baseline) [ktoe]",
-            line=dict(color="#ef4444", width=2)
-        ))
-        fig.add_trace(go.Scatter(
-            x=combo["Year"], y=combo["Selected Production Potential (ktoe)"],
-            mode="lines+markers", name=f"Production ({combo_code})",
-            line=dict(color="#10b981", width=2, dash="dot")
-        ))
-
-        fig.update_layout(
-            title=f"Biofuels demand vs potential supply ({combo_code})",
-            barmode="group",
-            xaxis_title="Year",
-            yaxis_title="ktoe",
-            width=theme.CHART_WIDTH,
-            height=theme.CHART_HEIGHT
-        )
-        st.plotly_chart(fig, use_container_width=False)
-
-    # ==================================================
-    # (b) POTENTIAL FOR EXPORT
-    # ==================================================
+    # --- Potential for Export ---
     with col2:
-        # --- compute export potentials and align array lengths
-        export_min = (min_prod - dem_bau).clip(min=0)
-        export_max = (max_prod - dem_bau).clip(min=0)
-        min_len2 = min(len(export_min), len(export_max), len(years))
+        exp_min_col = f"MinExport_{scen_key}_ktoe"
+        exp_max_col = f"MaxExport_{scen_key}_ktoe"
 
-        # --- build export DataFrame
-        bars2 = pd.DataFrame({
-            "Year": years[:min_len2] * 2,
-            "Component": (["Min export potential [ktoe]"] * min_len2)
-                       + (["Max export potential [ktoe]"] * min_len2),
-            "Value": list(export_min[:min_len2]) + list(export_max[:min_len2]),
+        exp_df = exports.melt(
+            id_vars=["Year"],
+            value_vars=[exp_min_col, exp_max_col],
+            var_name="Component",
+            value_name="Value"
+        )
+        exp_df["Component"] = exp_df["Component"].replace({
+            exp_min_col: "Min export potential [ktoe]",
+            exp_max_col: "Max export potential [ktoe]",
         })
 
         fig2 = px.bar(
-            bars2,
+            exp_df,
             x="Year",
             y="Value",
             color="Component",
             color_discrete_map={
-                "Min export potential [ktoe]": "#a7f3d0",
-                "Max export potential [ktoe]": "#047857",
+                "Min export potential [ktoe]": "#86efac",
+                "Max export potential [ktoe]": "#22c55e",
             },
-        )
-
-        fig2.add_trace(go.Scatter(
-            x=combo["Year"],
-            y=combo["Selected Export Potential (ktoe)"],
-            mode="lines+markers",
-            name=f"Export ({combo_code})",
-            line=dict(color="#166534", width=2, dash="dot")
-        ))
-
-        fig2.update_layout(
-            title=f"Potential for Biofuels Export ({combo_code})",
+            title=f"Potential for Biofuels Export ({scen_key})",
             barmode="group",
-            xaxis_title="Year",
-            yaxis_title="ktoe",
             width=theme.CHART_WIDTH,
-            height=theme.CHART_HEIGHT
+            height=theme.CHART_HEIGHT,
         )
-        st.plotly_chart(fig2, use_container_width=False)
+        st.plotly_chart(fig2, use_container_width=False, key=f"biofuels_export_{scen_key.lower()}")
