@@ -226,7 +226,7 @@ def build_sankey_from_balance(df: pd.DataFrame, scenario: str | None = None) -> 
     node_order = present(SOURCES) + present(CONVERTERS) + [f for f in carriers if f in links_df["source"].tolist() or f in links_df["target"].tolist()] + present(SINKS)
     return links_df, node_order
 # Tabs
-tab_overview, tab_food, tab_energy, tab_biofuels, tab_shipping, tab_water, tab_about = st.tabs(theme.TAB_TITLES)
+tab_overview, tab_food, tab_energy, tab_biofuels, tab_shipping, tab_water, tab_about, tab_custom = st.tabs(theme.TAB_TITLES)
 
 # Overview Tab
 with tab_overview:
@@ -731,3 +731,18 @@ with tab_about:
             st.warning("sdsn_explainer.md exists but is empty.")
     else:
         st.warning("⚠️ content/sdsn.md not found.")
+        
+with tab_custom:
+    st.header("Custom")
+    
+    # Load Markdown from file
+    custom_file = BASE_DIR / "content" / "custom.md"
+    
+    if custom_file.exists():
+        text = custom_file.read_text(encoding="utf-8")
+        if text.strip():
+            st.markdown(text, unsafe_allow_html=True)
+        else:
+            st.warning("custom.md exists but is empty.")
+    else:
+        st.warning("⚠️ content/custom.md not found.")

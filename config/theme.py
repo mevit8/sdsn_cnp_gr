@@ -12,6 +12,7 @@ TAB_TITLES = [
     "🚢 Shipping",
     "💧 Land & Water Requirements",
     "🌍 SDSN Pathway",
+    "📄 Custom",
 ]
 # Fuel charts palette (black, gold, brown)
 # Make sure the keys match  melted 'Component' values exactly.
