@@ -225,7 +225,7 @@ def build_sankey_from_balance(df: pd.DataFrame, scenario: str | None = None) -> 
     node_order = present(SOURCES) + present(CONVERTERS) + [f for f in carriers if f in links_df["source"].tolist() or f in links_df["target"].tolist()] + present(SINKS)
     return links_df, node_order
 # Tabs
-tab_overview, tab_food, tab_energy, tab9, tab10, tab11, tab_sdsn = st.tabs(theme.TAB_TITLES)
+tab_overview, tab_food, tab_energy, tab_biofuels, tab_shipping, tab_water, tab_about = st.tabs(theme.TAB_TITLES)
 
 # Overview Tab
 with tab_overview:
@@ -517,9 +517,13 @@ with tab_energy:
         except Exception as e:
             st.error(f"Failed to build Sankey: {e}")
 
-with tab9:
+with tab_biofuels:
     scen = (selected_scenario or "").strip().upper()
-    from views.charts import load_biofuels_data, render_biofuels_base_charts, render_biofuels_interactive_controls
+    from views.charts import (
+        load_biofuels_data,
+        render_biofuels_base_charts,
+        render_biofuels_interactive_controls,
+    )
 
     # --- Markdown explainer ---
     text = load_scenario_md("biofuels_explainer", scen)
@@ -528,20 +532,44 @@ with tab9:
 
     # --- INTERACTIVE MODE ---
     if scen == "INTERACTIVE":
-        render_biofuels_interactive_controls("Biofuels")
+        st.subheader("Biofuels – Interactive Scenario Builder")
+
+        # Render all interactive controls (first)
+        try:
+            render_biofuels_interactive_controls("Biofuels")
+        except Exception as e:
+            st.error(f"❌ Could not render Biofuels interactive charts: {e}")
+
+        st.markdown("---")
+
+        # ✅ Sensitivity Summary LAST (like Energy tab)
+        with st.expander("📉 Sensitivity Summary", expanded=False):
+            img_path = BASE_DIR / "content" / "bio_sensitivity.png"
+            if img_path.exists():
+                st.image(
+                    str(img_path),
+                    width=800,
+                    caption="Relative contribution of SSP and renewables uptake assumptions."
+                )
+            else:
+                st.warning("⚠️ bio_sensitivity.png not found in content/ folder.")
 
     # --- NON-INTERACTIVE MODES (BAU / NCNC) ---
     else:
         scen_key = "BAU" if scen == "BAU" else "NCNC"
 
-        # ✅ Use the same unified loader used by interactive mode
-        data = load_biofuels_data()
-        prod, exports = data["production"], data["exports"]
+        try:
+            data = load_biofuels_data()
+            prod, exports = data.get("production"), data.get("exports")
 
-        # ✅ Render using the same consistent chart logic
-        render_biofuels_base_charts(prod, exports, scen_key)
+            if prod is not None and exports is not None:
+                render_biofuels_base_charts(prod, exports, scen_key)
+            else:
+                st.warning("⚠️ Missing Biofuels data (production or exports).")
+        except Exception as e:
+            st.error(f"❌ Failed to load Biofuels data: {e}")
        
-with tab10:
+with tab_shipping:
     # Load scenario-specific explainer if it exists
     text = load_scenario_md("ships_explainer", selected_scenario)
     if text:
@@ -613,7 +641,7 @@ with tab10:
                 fig_penalty = render_ships_ets_penalty(base_df, y_label="Costs (M€)")
                 st.plotly_chart(fig_penalty, use_container_width=False, key="ships_ets_penalty")
 
-with tab11:
+with tab_water:
     scen = (selected_scenario or "").strip().upper()
 
     # Load explainer for all scenarios
@@ -671,7 +699,7 @@ with tab11:
         )
         st.plotly_chart(fig_m, use_container_width=True, key="monthly_water")
 
-with tab_sdsn:
+with tab_about:
     st.header("About SDSN Greece")
 
     # Load Markdown from file
