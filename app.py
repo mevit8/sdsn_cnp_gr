@@ -655,60 +655,67 @@ with tab_shipping:
 with tab_water:
     scen = (selected_scenario or "").strip().upper()
 
-    # Load explainer for all scenarios
+    # Load explainer
     text = load_scenario_md("water_explainer", scen)
     if text:
         st.markdown(text, unsafe_allow_html=True)
     else:
         st.warning("No Water explainer found for this scenario.")
 
-    try:
-        water = load_water_requirements()
-    except Exception as e:
-        st.warning(f"Could not load water data: {e}")
-        water = {}
+    # --- INTERACTIVE MODE ---
+    if scen == "INTERACTIVE":
+        from views.charts import render_land_water_interactive_controls
+        render_land_water_interactive_controls("Land & Water Requirements")
+    
+    # --- BAU / NCNC MODES (existing charts) ---
+    else:
+        try:
+            water = load_water_requirements()
+        except Exception as e:
+            st.warning(f"Could not load water data: {e}")
+            water = {}
 
-    # --- Urban | Agriculture ---
-    wcol1, wcol2 = st.columns(2)
+        # --- Urban | Agriculture ---
+        wcol1, wcol2 = st.columns(2)
 
-    with wcol1:
-        df_u = water.get("urban")
-        fig_u = render_water_band(
-            df_u if df_u is not None else pd.DataFrame(),
-            title="Urban Water Requirements",
-            y_label="Water Requirements [hm³]",
-        )
-        st.plotly_chart(fig_u, use_container_width=True, key="urban_water")
+        with wcol1:
+            df_u = water.get("urban")
+            fig_u = render_water_band(
+                df_u if df_u is not None else pd.DataFrame(),
+                title="Urban Water Requirements",
+                y_label="Water Requirements [hm³]",
+            )
+            st.plotly_chart(fig_u, use_container_width=True, key="urban_water")
 
-    with wcol2:
-        df_a = water.get("agriculture")
-        fig_a = render_water_band(
-            df_a if df_a is not None else pd.DataFrame(),
-            title="Agriculture Water Requirements",
-            y_label="Water Requirements [hm³]",
-        )
-        st.plotly_chart(fig_a, use_container_width=True, key="agri_water")
+        with wcol2:
+            df_a = water.get("agriculture")
+            fig_a = render_water_band(
+                df_a if df_a is not None else pd.DataFrame(),
+                title="Agriculture Water Requirements",
+                y_label="Water Requirements [hm³]",
+            )
+            st.plotly_chart(fig_a, use_container_width=True, key="agri_water")
 
-    # --- Industrial | Monthly ---
-    wcol3, wcol4 = st.columns(2)
+        # --- Industrial | Monthly ---
+        wcol3, wcol4 = st.columns(2)
 
-    with wcol3:
-        df_i = water.get("industrial")
-        fig_i = render_water_band(
-            df_i if df_i is not None else pd.DataFrame(),
-            title="Industrial Water Requirements",
-            y_label="Water Requirements [hm³]",
-        )
-        st.plotly_chart(fig_i, use_container_width=True, key="ind_water")
+        with wcol3:
+            df_i = water.get("industrial")
+            fig_i = render_water_band(
+                df_i if df_i is not None else pd.DataFrame(),
+                title="Industrial Water Requirements",
+                y_label="Water Requirements [hm³]",
+            )
+            st.plotly_chart(fig_i, use_container_width=True, key="ind_water")
 
-    with wcol4:
-        df_m = water.get("monthly")
-        fig_m = render_water_monthly_band(
-            df_m if df_m is not None else pd.DataFrame(),
-            title="Monthly Water Requirements (2020)",
-            y_label="Water Requirements [hm³]",
-        )
-        st.plotly_chart(fig_m, use_container_width=True, key="monthly_water")
+        with wcol4:
+            df_m = water.get("monthly")
+            fig_m = render_water_monthly_band(
+                df_m if df_m is not None else pd.DataFrame(),
+                title="Monthly Water Requirements (2020)",
+                y_label="Water Requirements [hm³]",
+            )
+            st.plotly_chart(fig_m, use_container_width=True, key="monthly_water")
 
 with tab_about:
     st.header("About SDSN Greece")

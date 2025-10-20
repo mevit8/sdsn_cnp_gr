@@ -393,5 +393,207 @@ def render_fable_interactive_charts(pop: str, diet: str, prod: str):
                 st.info("No land components available for this option.")
 
 
+# ---------------------------------------------------------------------
+# Interactive mode for Land & Water Requirements tab
+# ---------------------------------------------------------------------
+
+@st.cache_data(show_spinner=False)
+def _load_water_scenario(path: str, sheet: str) -> dict[str, pd.DataFrame]:
+    """Load water data for a specific SSP scenario (Option A/B/C)."""
+    try:
+        df = pd.read_excel(path, sheet_name=sheet)
+        df.columns = [str(c).strip() for c in df.columns]
+        
+        if "Year" not in df.columns:
+            st.warning(f"⚠️ 'Year' column missing in {sheet}")
+            return {"urban": pd.DataFrame(), "agriculture": pd.DataFrame(), "industrial": pd.DataFrame()}
+        
+        # Extract sectors with Min/Average/Max columns
+        urban_cols = [c for c in df.columns if c.startswith("Urban_")]
+        irr_cols = [c for c in df.columns if c.startswith("Irr_")]
+        ind_cols = [c for c in df.columns if c.startswith("Ind_")]
+        
+        urban_df = df[["Year"] + urban_cols].copy()
+        urban_df.columns = ["Year", "Min", "Average", "Max"]
+        
+        agri_df = df[["Year"] + irr_cols].copy()
+        agri_df.columns = ["Year", "Min", "Average", "Max"]
+        
+        ind_df = df[["Year"] + ind_cols].copy()
+        ind_df.columns = ["Year", "Min", "Average", "Max"]
+        
+        return {
+            "urban": urban_df,
+            "agriculture": agri_df,
+            "industrial": ind_df,
+        }
+    except Exception as e:
+        st.warning(f"❌ Could not load water scenario {sheet}: {e}")
+        return {"urban": pd.DataFrame(), "agriculture": pd.DataFrame(), "industrial": pd.DataFrame()}
+
+
+def render_land_water_interactive_controls(section_title: str):
+    """
+    Render interactive controls for Land & Water Requirements tab.
+    Two sections:
+    1. Land requirements for renewable energy (solar/wind)
+    2. Water requirements by SSP scenario
+    """
+    st.subheader(f"{section_title} – Interactive Scenario Builder")
+    
+    # =========================================================================
+    # SECTION 1: LAND REQUIREMENTS FOR RENEWABLE ENERGY
+    # =========================================================================
+    st.markdown("### 🌱 Land Requirements for Renewable Energy Expansion")
+    
+    col_solar, col_wind = st.columns(2)
+    
+    with col_solar:
+        solar_mw = st.number_input(
+            "Required Additional Capacity for Solar Power (MW):",
+            min_value=0,
+            value=28051,
+            step=100,
+            key="land_solar_capacity"
+        )
+    
+    with col_wind:
+        wind_mw = st.number_input(
+            "Required Additional Capacity for Wind Farms (MW):",
+            min_value=0,
+            value=8540,
+            step=100,
+            key="land_wind_capacity"
+        )
+    
+    # Calculate results
+    solar_land_min = solar_mw * 0.0239
+    solar_land_avg = solar_mw * 0.0301
+    solar_land_max = solar_mw * 0.0364
+    solar_cost_min = solar_land_min * 1e6
+    solar_cost_avg = solar_land_avg * 1e6
+    solar_cost_max = solar_land_max * 1e6
+    
+    wind_land_min = wind_mw * 0.0022
+    wind_land_avg = wind_mw * 0.0030
+    wind_land_max = wind_mw * 0.0041
+    wind_cost_min = wind_land_min * 1.5e6
+    wind_cost_avg = wind_land_avg * 1.5e6
+    wind_cost_max = wind_land_max * 1.5e6
+    
+    # Display results in tables
+    st.markdown("#### 📊 Estimated Land Requirements and Installation Costs")
+    
+    col_table1, col_table2 = st.columns(2)
+    
+    with col_table1:
+        st.markdown("**Solar PVs**")
+        solar_results = pd.DataFrame({
+            "Scenario": ["Min", "Avg", "Max"],
+            "Land (km²)": [f"{solar_land_min:.2f}", f"{solar_land_avg:.2f}", f"{solar_land_max:.2f}"],
+            "Installation Cost (M€)": [f"{solar_cost_min/1e6:.2f}", f"{solar_cost_avg/1e6:.2f}", f"{solar_cost_max/1e6:.2f}"],
+        })
+        st.dataframe(solar_results, hide_index=True, use_container_width=True)
+    
+    with col_table2:
+        st.markdown("**Wind Farms (Onshore)**")
+        wind_results = pd.DataFrame({
+            "Scenario": ["Min", "Avg", "Max"],
+            "Land (km²)": [f"{wind_land_min:.2f}", f"{wind_land_avg:.2f}", f"{wind_land_max:.2f}"],
+            "Installation Cost (M€)": [f"{wind_cost_min/1e6:.2f}", f"{wind_cost_avg/1e6:.2f}", f"{wind_cost_max/1e6:.2f}"],
+        })
+        st.dataframe(wind_results, hide_index=True, use_container_width=True)
+    
+    # Land sensitivity summary
+    with st.expander("📉 Land Requirements - Sensitivity Summary", expanded=False):
+        from pathlib import Path
+        img_path = Path("content/land_sensitivity.png")
+        if img_path.exists():
+            st.image(str(img_path), width=800, caption="Sensitivity of land requirements to capacity assumptions.")
+        else:
+            st.info("⚠️ land_sensitivity.png not found in content/ folder.")
+    
+    st.markdown("---")
+    
+    # =========================================================================
+    # SECTION 2: WATER REQUIREMENTS BY SSP SCENARIO
+    # =========================================================================
+    st.markdown("### 💧 Water Requirements by SSP Scenario")
+    
+    # SSP scenario selector
+    ssp_option = st.selectbox(
+        "Select SSP Scenario (Population, GDP, and technology projections to 2050):",
+        options=["A", "B", "C"],
+        format_func=lambda x: {
+            "A": "Option A – SSP2 (BAU): Moderate population decline, GDP +1.9–2.2%/yr",
+            "B": "Option B – SSP1: Strong sustainability, GDP +2.0–2.5%/yr, reduced water losses",
+            "C": "Option C – SSP5: Rapid economic development, GDP +2.3–2.5%/yr, high water losses",
+        }[x],
+        index=0,
+        key="water_ssp_selector",
+        help="""**Option A (SSP2):** Middle-of-the-road scenario with moderate growth and network losses (30-40%).
+**Option B (SSP1):** Sustainable development with green industry and improved water infrastructure (15-25% losses).
+**Option C (SSP5):** High growth scenario with rapid industrial expansion and high water losses (40-50%)."""
+    )
+    
+    # Load water data for selected scenario
+    data_path = "data/Water_scenarios.xlsx"
+    sheet_map = {"A": "Option_A", "B": "Option_B", "C": "Option_C"}
+    water_data = _load_water_scenario(data_path, sheet_map[ssp_option])
+    
+    # Load monthly data (static, doesn't change with SSP)
+    try:
+        monthly_df = load_water_requirements()["monthly"]
+    except:
+        monthly_df = pd.DataFrame()
+    
+    # Render the 4 water charts in 2×2 grid
+    wcol1, wcol2 = st.columns(2)
+    
+    with wcol1:
+        df_u = water_data.get("urban", pd.DataFrame())
+        fig_u = render_water_band(
+            df_u,
+            title="Urban Water Requirements",
+            y_label="Water Requirements [hm³]",
+        )
+        st.plotly_chart(fig_u, use_container_width=True, key=f"urban_water_{ssp_option}")
+    
+    with wcol2:
+        df_a = water_data.get("agriculture", pd.DataFrame())
+        fig_a = render_water_band(
+            df_a,
+            title="Agriculture Water Requirements",
+            y_label="Water Requirements [hm³]",
+        )
+        st.plotly_chart(fig_a, use_container_width=True, key=f"agri_water_{ssp_option}")
+    
+    wcol3, wcol4 = st.columns(2)
+    
+    with wcol3:
+        df_i = water_data.get("industrial", pd.DataFrame())
+        fig_i = render_water_band(
+            df_i,
+            title="Industrial Water Requirements",
+            y_label="Water Requirements [hm³]",
+        )
+        st.plotly_chart(fig_i, use_container_width=True, key=f"ind_water_{ssp_option}")
+    
+    with wcol4:
+        fig_m = render_water_monthly_band(
+            monthly_df,
+            title="Monthly Water Requirements (2020)",
+            y_label="Water Requirements [hm³]",
+        )
+        st.plotly_chart(fig_m, use_container_width=True, key=f"monthly_water_{ssp_option}")
+    
+    # Water sensitivity summary
+    with st.expander("📉 Water Requirements - Sensitivity Summary", expanded=False):
+        from pathlib import Path
+        img_path = Path("content/water_sensitivity.png")
+        if img_path.exists():
+            st.image(str(img_path), width=800, caption="Sensitivity of water requirements to SSP assumptions.")
+        else:
+            st.info("⚠️ water_sensitivity.png not found in content/ folder.")
 
 
