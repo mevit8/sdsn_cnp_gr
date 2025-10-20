@@ -37,6 +37,7 @@ from views.charts import (
     render_ships_fuel_cost,
     render_ships_emissions_and_cap,
     render_ships_ets_penalty,
+    render_ships_interactive_controls, 
 
     # Water & FABLE (Food–Land)
     render_water_band,
@@ -570,30 +571,35 @@ with tab_biofuels:
             st.error(f"❌ Failed to load Biofuels data: {e}")
        
 with tab_shipping:
-    # Load scenario-specific explainer if it exists
+    scen = (selected_scenario or "").strip().upper()
+    
+    # Load scenario-specific explainer
     text = load_scenario_md("ships_explainer", selected_scenario)
     if text:
         st.markdown(text, unsafe_allow_html=True)
     else:
         st.warning("No Ships explainer found for this scenario.")
-
-    try:
-        base_df = load_maritime_base()
-    except Exception as e:
-        st.warning(f"Could not load maritime data: {e}")
-    else:
-        scen = (selected_scenario or "").strip().upper()
-
-        # Special rule: BAU shows ONE number (KPI), not the 8 charts
-        if scen == "BAU":
+    
+    # --- INTERACTIVE MODE ---
+    if scen == "INTERACTIVE":
+        from views.charts import render_ships_interactive_controls
+        render_ships_interactive_controls("Shipping (Maritime)")
+    
+    # --- BAU MODE (single KPI) ---
+    elif scen == "BAU":
+        try:
+            base_df = load_maritime_base()
+        except Exception as e:
+            st.warning(f"Could not load maritime data: {e}")
+        else:
             import plotly.graph_objects as go
 
             fig_bau = go.Figure()
 
             fig_bau.add_trace(go.Indicator(
                 mode="number",
-                value=99.68,  # <<< replace with dynamic value if available
-                number={"suffix": " MtCO₂e", "font": {"size": 80}},  # BIG FONT
+                value=99.68,  # Replace with dynamic value if available
+                number={"suffix": " MtCO₂e", "font": {"size": 80}},
                 title={"text": "BAU – Total Emissions", "font": {"size": 24}},
             ))
 
@@ -604,7 +610,13 @@ with tab_shipping:
             )
 
             st.plotly_chart(fig_bau, use_container_width=False, key="bau_total_emissions")
-
+    
+    # --- NCNC MODE (8 charts in 2×4 grid) ---
+    else:
+        try:
+            base_df = load_maritime_base()
+        except Exception as e:
+            st.warning(f"Could not load maritime data: {e}")
         else:
             col1, col2 = st.columns(2)
             with col1:
@@ -640,7 +652,6 @@ with tab_shipping:
             with col8:
                 fig_penalty = render_ships_ets_penalty(base_df, y_label="Costs (M€)")
                 st.plotly_chart(fig_penalty, use_container_width=False, key="ships_ets_penalty")
-
 with tab_water:
     scen = (selected_scenario or "").strip().upper()
 

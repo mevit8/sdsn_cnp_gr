@@ -12,6 +12,7 @@ from .generic import (
 )
 
 # --- Ships (Maritime)
+# --- Ships (Maritime)
 from .ships import (
     render_ships_stock,
     render_ships_new,
@@ -21,6 +22,7 @@ from .ships import (
     render_ships_fuel_cost,
     render_ships_emissions_and_cap,
     render_ships_ets_penalty,
+    render_ships_interactive_controls,
 )
 
 # --- Water & FABLE (Food–Land)

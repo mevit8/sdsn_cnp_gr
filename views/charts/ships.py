@@ -1,7 +1,9 @@
 from __future__ import annotations
+import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
+from pathlib import Path
 from config import theme
 from .helpers import _resolve_ci
 
@@ -130,3 +132,103 @@ def render_ships_ets_penalty(df_base: pd.DataFrame, y_label="Costs (M€)"):
     fig.update_layout(width=theme.CHART_WIDTH, height=theme.CHART_HEIGHT,
                       margin=dict(l=10,r=10,t=60,b=10), xaxis_title="", yaxis_title=y_label)
     return fig
+
+
+# ---------------------------------------------------------------------
+# Interactive mode for Shipping tab
+# ---------------------------------------------------------------------
+
+@st.cache_data(show_spinner=False)
+def _load_maritime_sheet(path: str, sheet: str) -> pd.DataFrame:
+    """Load a specific sheet from the Maritime Excel file."""
+    try:
+        df = pd.read_excel(path, sheet_name=sheet)
+        for c in df.columns:
+            if c != "Year":
+                df[c] = pd.to_numeric(df[c], errors="coerce")
+        return df
+    except Exception as e:
+        st.warning(f"Could not load sheet '{sheet}': {e}")
+        return pd.DataFrame()
+
+
+def render_ships_interactive_controls(section_title: str):
+    """
+    Render interactive controls and charts for the Shipping (Maritime) tab.
+    Allows users to select from 20 different scenarios and see all 8 charts update dynamically.
+    """
+    st.subheader(f"{section_title} – Interactive Scenario Builder")
+    
+    # Define all 20 scenarios with descriptions
+    SCENARIOS = {
+        "base": "Base (Business-as-usual - BAU)",
+        "bau_fuel_meoh": "BAU + Methanol shift",
+        "bau_fuel_h2": "BAU + Hydrogen shift",
+        "bau_ssp5": "BAU + High demand (SSP5)",
+        "bau_ssp1": "BAU + Low demand (SSP1)",
+        "tech_ccs": "Technology: Carbon Capture & Storage",
+        "tech_hull": "Technology: Hull cleaning / drag reduction",
+        "tech_eng_opt": "Technology: Engine optimization",
+        "tech_port_call": "Technology: Port call optimization",
+        "tech_route_opt": "Technology: Route optimization",
+        "tech_propul": "Technology: Propulsion system upgrades",
+        "techcomb": "Technology: Combined package",
+        "fuel_cost_high": "High fuel cost trajectory",
+        "fuel_cost_low": "Low fuel cost trajectory",
+        "co2_cap_pess": "Strict CO₂ cap (pessimistic)",
+        "co2_cap_opt": "Loose CO₂ cap (optimistic)",
+        "ets_price_no": "No ETS penalty",
+        "ets_price_strict": "High/strict ETS price",
+        "fuel_cons_fast": "Fast fuel transition",
+        "fuel_cons_slow": "Slow fuel transition",
+    }
+    
+    # Dropdown control
+    selected_sheet = st.selectbox(
+        "Select scenario:",
+        options=list(SCENARIOS.keys()),
+        format_func=lambda x: SCENARIOS[x],
+        index=0,  # default to "base"
+        key="ships_scenario_selector"
+    )
+    
+    # Load data from selected sheet
+    data_path = "data/Maritime_results_all_scenarios.xlsx"
+    df = _load_maritime_sheet(data_path, selected_sheet)
+    
+    if df.empty:
+        st.error(f"❌ No data available for scenario: {SCENARIOS[selected_sheet]}")
+        return
+    
+    # Render all 8 charts in 2×4 grid layout (same as NCNC mode)
+    col1, col2 = st.columns(2)
+    with col1:
+        fig = render_ships_stock(df, y_label="Number of Stock Ships")
+        st.plotly_chart(fig, use_container_width=False, key=f"ships_stock_{selected_sheet}")
+    with col2:
+        fig_new = render_ships_new(df, y_label="Number of New Ships")
+        st.plotly_chart(fig_new, use_container_width=False, key=f"ships_new_{selected_sheet}")
+    
+    col3, col4 = st.columns(2)
+    with col3:
+        fig_inv = render_ships_investment_cost(df, y_label="Costs (M€)")
+        st.plotly_chart(fig_inv, use_container_width=False, key=f"ships_investment_{selected_sheet}")
+    with col4:
+        fig_op = render_ships_operational_cost(df, y_label="Costs (M€)")
+        st.plotly_chart(fig_op, use_container_width=False, key=f"ships_operational_{selected_sheet}")
+    
+    col5, col6 = st.columns(2)
+    with col5:
+        fig_fd = render_ships_fuel_demand(df, y_label="Fuel Demand [tonnes]")
+        st.plotly_chart(fig_fd, use_container_width=False, key=f"ships_fuel_demand_{selected_sheet}")
+    with col6:
+        fig_fc = render_ships_fuel_cost(df, y_label="Costs (M€)")
+        st.plotly_chart(fig_fc, use_container_width=False, key=f"ships_fuel_cost_{selected_sheet}")
+    
+    col7, col8 = st.columns(2)
+    with col7:
+        fig_emcap = render_ships_emissions_and_cap(df, cap_df=None, y_label="CO₂ Emissions (MtCO₂e)")
+        st.plotly_chart(fig_emcap, use_container_width=False, key=f"ships_emissions_{selected_sheet}")
+    with col8:
+        fig_penalty = render_ships_ets_penalty(df, y_label="Costs (M€)")
+        st.plotly_chart(fig_penalty, use_container_width=False, key=f"ships_ets_{selected_sheet}")
