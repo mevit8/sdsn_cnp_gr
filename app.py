@@ -1,13 +1,34 @@
+# app.py
+# ---------------------------------------------------------------------
+# Imports
+# ---------------------------------------------------------------------
 from __future__ import annotations
 import streamlit as st
-from config import theme
 import pandas as pd
-from models.data_loader import load_and_prepare_excel, prepare_stacked_data, aggregate_to_periods, load_water_requirements
+from pathlib import Path
+
+# --- Config & Theme
+from config import theme
+from pathlib import Path
+BASE_DIR = Path(__file__).parent
+
+
+# --- Data Models & Utilities
+from models.data_loader import (
+    load_and_prepare_excel,
+    prepare_stacked_data,
+    aggregate_to_periods,
+)
+
+# --- Visualization Modules (refactored)
 from views.charts import (
+    # Generic plotting
     render_bar_chart,
     render_line_chart,
     render_grouped_bar_and_line,
     render_sankey,
+
+    # Ships (Maritime)
     render_ships_stock,
     render_ships_new,
     render_ships_investment_cost,
@@ -16,12 +37,21 @@ from views.charts import (
     render_ships_fuel_cost,
     render_ships_emissions_and_cap,
     render_ships_ets_penalty,
+
+    # Water & FABLE (Food–Land)
     render_water_band,
     render_water_monthly_band,
+    render_fable_interactive_controls,
+    load_water_requirements,
+
+    # Energy
+    render_energy_interactive_controls,
+
+    # Biofuels
+    render_biofuels_interactive_controls,
+    load_biofuels_data,
 )
-from PIL import Image
-import plotly.graph_objects as go
-from pathlib import Path
+
 
 # ---------------------------------------------------------------------
 # Basic setup
@@ -208,8 +238,8 @@ with tab_overview:
         st.warning("⚠️ content/introduction.md not found.")
 with tab_food:
     if selected_scenario == "Interactive":
-        from views.charts import render_interactive_controls
-        render_interactive_controls("Food–Land")
+        from views.charts import render_fable_interactive_controls
+        render_fable_interactive_controls("Food–Land")
     else:
         scen = (selected_scenario or "").strip().upper()
         # Scenario-specific explainer first
@@ -310,331 +340,206 @@ with tab_food:
                 "Year", "Value", "Component",
                 "Land uses evolution",
                 y_label="1000 km²",
+                colors=theme.LANDUSE_COLORS,   # ✅ ensure consistent colors for BAU/NCNC
                 key="food_landuse"
             )
 
 
 with tab_energy:
     scen = (selected_scenario or "").strip().upper()
-    # --- Handle INTERACTIVE scenario separately ---
+
+    # --- INTERACTIVE scenario: render ONLY interactive charts and exit this tab section
     if scen == "INTERACTIVE":
         from views.charts import render_energy_interactive_controls
-        render_energy_interactive_controls("Energy Emissions")   
-    # ---------------------------------------------------------------------
-    # SCENARIOS: BAU / NCNC (existing charts)
-    # ---------------------------------------------------------------------
-    # Scenario-specific explainer first
-    scen_file = BASE_DIR / "content" / f"energy_emissions_explainer_{scen}.md"
-    default_file = BASE_DIR / "content" / "energy_emissions_explainer.md"
-
-    if scen_file.exists():
-        text = scen_file.read_text(encoding="utf-8")
-        if text.strip():
-            st.markdown(text, unsafe_allow_html=True)
-        else:
-            st.warning(f"{scen_file.name} is empty.")
-    elif default_file.exists():
-        text = default_file.read_text(encoding="utf-8")
-        if text.strip():
-            st.markdown(text, unsafe_allow_html=True)
-        else:
-            st.warning("energy_emissions_explainer.md is empty.")
+        render_energy_interactive_controls("Energy Emissions")
     else:
-        st.warning(f"No energy explainer found for scenario {scen} or default.")
+        # ---------------------------------------------------------------------
+        # SCENARIOS: BAU / NCNC (existing charts)
+        # ---------------------------------------------------------------------
 
-    # ---------------------------------------------------------------------
-    # First row: Energy consumption & Emissions
-    # ---------------------------------------------------------------------
-    row1_col1, row1_col2 = st.columns(2)
+        # Scenario-specific explainer first
+        scen_file = BASE_DIR / "content" / f"energy_emissions_explainer_{scen}.md"
+        default_file = BASE_DIR / "content" / "energy_emissions_explainer.md"
 
-    with row1_col1:
-        cols = ["Residential", "Agriculture", "Industry", "Energy Products",
-                "Passenger Transportation", "Freight Transportation", "Maritime", "Services"]
-        melted, years = prepare_stacked_data(df_energy, selected_scenario, "Year", cols)
-        period_df, period_order = aggregate_to_periods(
-            melted, year_col="Year", value_col="Value", component_col="Component",
-            period_years=4, agg="mean", label_mode="range"
-        )
-        render_bar_chart(
-            period_df, "PeriodStr", "Value", "Component",
-            "Total energy consumption per sector",
-            period_order,
-            y_label="ktoe",
-            key="energy_consumption"
-        )
-
-    with row1_col2:
-        cols = ["Residential", "Agriculture", "Industry", "Energy Products",
-                "Passenger Transportation", "Freight Transportation", "Maritime", "Services"]
-        melted, years = prepare_stacked_data(df_demand_emissions, selected_scenario, "Year", cols)
-        period_df, period_order = aggregate_to_periods(
-            melted, year_col="Year", value_col="Value", component_col="Component",
-            period_years=4, agg="mean", label_mode="range"
-        )
-        render_bar_chart(
-            period_df, "PeriodStr", "Value", "Component",
-            "Emissions from energy consumption by sector",
-            period_order,
-            y_label="MtCO₂e",
-            key="energy_demand_emissions"
-        )
-
-    # ---------------------------------------------------------------------
-    # Second row: Energy per fuel & Fuel emissions
-    # ---------------------------------------------------------------------
-    row2_col1, row2_col2 = st.columns(2)
-
-    with row2_col1:
-        cols = ["Hydrogen Generation", "Electricity Generation", "Heat Generation", "Oil Refining"]
-        melted, years = prepare_stacked_data(df_energy_supply, selected_scenario, "Year", cols)
-        period_df, period_order = aggregate_to_periods(
-            melted, year_col="Year", value_col="Value", component_col="Component",
-            period_years=4, agg="mean", label_mode="range"
-        )
-        render_bar_chart(
-            period_df, "PeriodStr", "Value", "Component",
-            "Generated energy per fuel type",
-            period_order,
-            colors=theme.FUEL_COLORS,
-            y_label="ktoe",
-            key="energy_generated_fuel"
-        )
-
-    with row2_col2:
-        cols = ["Electricity Generation", "Heat Generation", "Oil Refining"]
-        melted, years = prepare_stacked_data(df_supply_emissions, selected_scenario, "Year", cols)
-        period_df, period_order = aggregate_to_periods(
-            melted, year_col="Year", value_col="Value", component_col="Component",
-            period_years=4, agg="mean", label_mode="range"
-        )
-        render_bar_chart(
-            period_df, "PeriodStr", "Value", "Component",
-            "Emissions per fuel type",
-            period_order,
-            colors=theme.FUEL_COLORS,
-            y_label="MtCO₂e",
-            key="emissions_per_fuel"
-        )
-
-    st.markdown("---")  # visual separator
-
-    # ---------------------------------------------------------------------
-    # Energy Balance (Sankey)
-    # ---------------------------------------------------------------------
-    SANKEY_LABEL_MAP = {
-        "Service Tertiary Sector": "Service<br>Tertiary",
-        "Passenger Transportation": "Passenger<br>Transport",
-        "Freight Transportation": "Freight<br>Transport",
-        "Energy Product Industry": "Energy Product<br>Industry",
-        "Coal Lignite Production": "Coal/Lignite<br>Production",
-        "Coal Lignite Imports": "Coal/Lignite<br>Imports",
-        "Coal Unspecified Imports": "Coal (unspec.)<br>Imports",
-        "Refinery Feedstocks Imports": "Refinery Feedstocks<br>Imports",
-        "Synthetic Fuels Module": "Synthetic<br>Fuels Module",
-        "Transmission and Distribution": "Transmission &<br>Distribution",
-    }
-
-    scen_file = BASE_DIR / "content" / f"energy_balance_explainer_{scen}.md"
-    default_file = BASE_DIR / "content" / "energy_balance_explainer.md"
-
-    if scen_file.exists():
-        text = scen_file.read_text(encoding="utf-8")
-        if text.strip():
-            st.markdown(text, unsafe_allow_html=True)
+        if scen_file.exists():
+            text = scen_file.read_text(encoding="utf-8")
+            if text.strip():
+                st.markdown(text, unsafe_allow_html=True)
+            else:
+                st.warning(f"{scen_file.name} is empty.")
+        elif default_file.exists():
+            text = default_file.read_text(encoding="utf-8")
+            if text.strip():
+                st.markdown(text, unsafe_allow_html=True)
+            else:
+                st.warning("energy_emissions_explainer.md is empty.")
         else:
-            st.warning(f"{scen_file.name} is empty.")
-    elif default_file.exists():
-        text = default_file.read_text(encoding="utf-8")
-        if text.strip():
-            st.markdown(text, unsafe_allow_html=True)
-        else:
-            st.warning("energy_balance_explainer.md is empty.")
-    else:
-        st.warning(f"No energy balance explainer found for scenario {scen} or default.")
+            st.warning(f"No energy explainer found for scenario {scen} or default.")
 
-    SANKEY_NODE_COLORS = {
-        "Electricity": "#2563eb", "Natural Gas": "#0ea5e9", "Heat": "#ea580c",
-        "Crude Oil": "#f59e0b", "Biomass": "#16a34a", "Solar": "#fbbf24",
-        "Hydrogen": "#a855f7", "Ethanol": "#22c55e", "Synthetic Fuels": "#06b6d4",
-        "Electricity Generation": "#93c5fd", "Heat Generation": "#fdba74",
-        "Oil Refining": "#fcd34d", "Synthetic Fuels Module": "#99f6e4",
-        "Transmission and Distribution": "#cbd5e1",
-        "Residential": "#111827", "Industry": "#374151", "Agriculture": "#4b5563",
-        "Service Tertiary Sector": "#6b7280", "Passenger Transportation": "#9ca3af",
-        "Freight Transportation": "#9ca3af", "Maritime": "#9ca3af",
-        "Energy Product Industry": "#6b7280", "Hydrogen Generation": "#a78bfa",
-        "Losses": "#d1d5db", "Exports": "#d1d5db", "Waste": "#d1d5db",
-    }
+        # ---------------------------------------------------------------------
+        # First row: Energy consumption & Emissions
+        # ---------------------------------------------------------------------
+        row1_col1, row1_col2 = st.columns(2)
 
-    try:
-        links_df, node_order = build_sankey_from_balance(df_energy_balance, scenario=selected_scenario)
-        if links_df.empty:
-            st.info(f"No links could be derived for scenario: {selected_scenario}.")
-        else:
-            render_sankey(
-                links_df,
-                title=f"{selected_scenario} – Energy Generation → Consumption",
-                node_order=node_order,
-                full_width=True,
-                height=720,
-                label_wrap=14,
-                node_colors=SANKEY_NODE_COLORS,
+        with row1_col1:
+            cols = ["Residential", "Agriculture", "Industry", "Energy Products",
+                    "Passenger Transportation", "Freight Transportation", "Maritime", "Services"]
+            melted, years = prepare_stacked_data(df_energy, selected_scenario, "Year", cols)
+            period_df, period_order = aggregate_to_periods(
+                melted, year_col="Year", value_col="Value", component_col="Component",
+                period_years=4, agg="mean", label_mode="range"
             )
-    except Exception as e:
-        st.error(f"Failed to build Sankey: {e}")
+            render_bar_chart(
+                period_df, "PeriodStr", "Value", "Component",
+                "Total energy consumption per sector",
+                period_order,
+                y_label="ktoe",
+                key="energy_consumption"
+            )
 
-@st.cache_data(show_spinner=False)
-def load_biofuels_data(path: str = "data/LEAP_Biofuels.xlsx") -> pd.DataFrame:
-    """Load and tidy the 'Custom combinations from user' Biofuels sheet (Options A-A-A, B-B-B)."""
-    df_raw = pd.read_excel(path, sheet_name="Custom combinations from user", header=None)
+        with row1_col2:
+            cols = ["Residential", "Agriculture", "Industry", "Energy Products",
+                    "Passenger Transportation", "Freight Transportation", "Maritime", "Services"]
+            melted, years = prepare_stacked_data(df_demand_emissions, selected_scenario, "Year", cols)
+            period_df, period_order = aggregate_to_periods(
+                melted, year_col="Year", value_col="Value", component_col="Component",
+                period_years=4, agg="mean", label_mode="range"
+            )
+            render_bar_chart(
+                period_df, "PeriodStr", "Value", "Component",
+                "Emissions from energy consumption by sector",
+                period_order,
+                y_label="MtCO₂e",
+                key="energy_demand_emissions"
+            )
 
-    # Find option block start rows
-    option_rows = df_raw.index[df_raw.iloc[:, 0].astype(str).str.contains("Option", na=False)].tolist()
-    if not option_rows:
-        st.error("❌ Could not find any 'Option' rows in Biofuels sheet.")
-        return pd.DataFrame()
+        # ---------------------------------------------------------------------
+        # Second row: Energy per fuel & Fuel emissions
+        # ---------------------------------------------------------------------
+        row2_col1, row2_col2 = st.columns(2)
 
-    blocks = []
-    for i, start in enumerate(option_rows):
-        label = str(df_raw.iloc[start, 0]).strip()
-        end = option_rows[i + 1] if i + 1 < len(option_rows) else len(df_raw)
-        header_row = start + 1
-        if header_row >= len(df_raw):
-            continue
+        with row2_col1:
+            cols = ["Hydrogen Generation", "Electricity Generation", "Heat Generation", "Oil Refining"]
+            melted, years = prepare_stacked_data(df_energy_supply, selected_scenario, "Year", cols)
+            period_df, period_order = aggregate_to_periods(
+                melted, year_col="Year", value_col="Value", component_col="Component",
+                period_years=4, agg="mean", label_mode="range"
+            )
+            render_bar_chart(
+                period_df, "PeriodStr", "Value", "Component",
+                "Generated energy per fuel type",
+                period_order,
+                colors=theme.FUEL_COLORS,
+                y_label="ktoe",
+                key="energy_generated_fuel"
+            )
 
-        headers = df_raw.iloc[header_row].tolist()
-        data_start = header_row + 1
-        block = df_raw.iloc[data_start:end].copy().dropna(how="all")
-        if block.empty:
-            continue
+        with row2_col2:
+            cols = ["Electricity Generation", "Heat Generation", "Oil Refining"]
+            melted, years = prepare_stacked_data(df_supply_emissions, selected_scenario, "Year", cols)
+            period_df, period_order = aggregate_to_periods(
+                melted, year_col="Year", value_col="Value", component_col="Component",
+                period_years=4, agg="mean", label_mode="range"
+            )
+            render_bar_chart(
+                period_df, "PeriodStr", "Value", "Component",
+                "Emissions per fuel type",
+                period_order,
+                colors=theme.FUEL_COLORS,
+                y_label="MtCO₂e",
+                key="emissions_per_fuel"
+            )
 
-        block.columns = [str(h).strip() for h in headers]
-        block["ScenarioOption"] = label
-        blocks.append(block)
+        st.markdown("---")  # visual separator
 
-    if not blocks:
-        st.warning("⚠️ No data blocks parsed from Biofuels sheet.")
-        return pd.DataFrame()
+        # ---------------------------------------------------------------------
+        # Energy Balance (Sankey) — only for BAU/NCNC
+        # ---------------------------------------------------------------------
+        SANKEY_LABEL_MAP = {
+            "Service Tertiary Sector": "Service<br>Tertiary",
+            "Passenger Transportation": "Passenger<br>Transport",
+            "Freight Transportation": "Freight<br>Transport",
+            "Energy Product Industry": "Energy Product<br>Industry",
+            "Coal Lignite Production": "Coal/Lignite<br>Production",
+            "Coal Lignite Imports": "Coal/Lignite<br>Imports",
+            "Coal Unspecified Imports": "Coal (unspec.)<br>Imports",
+            "Refinery Feedstocks Imports": "Refinery Feedstocks<br>Imports",
+            "Synthetic Fuels Module": "Synthetic<br>Fuels Module",
+            "Transmission and Distribution": "Transmission &<br>Distribution",
+        }
 
-    df = pd.concat(blocks, ignore_index=True)
-    df.columns = [str(c).strip() for c in df.columns]
+        scen_file = BASE_DIR / "content" / f"energy_balance_explainer_{scen}.md"
+        default_file = BASE_DIR / "content" / "energy_balance_explainer.md"
 
-    # Extract scenario letters (A/B/C)
-    pat = r"Option\s*([A-C])\-([A-C])\-([A-C])"
-    df[["PopOpt", "DietOpt", "ProdOpt"]] = df["ScenarioOption"].str.extract(pat)
+        if scen_file.exists():
+            text = scen_file.read_text(encoding="utf-8")
+            if text.strip():
+                st.markdown(text, unsafe_allow_html=True)
+            else:
+                st.warning(f"{scen_file.name} is empty.")
+        elif default_file.exists():
+            text = default_file.read_text(encoding="utf-8")
+            if text.strip():
+                st.markdown(text, unsafe_allow_html=True)
+            else:
+                st.warning("energy_balance_explainer.md is empty.")
+        else:
+            st.warning(f"No energy balance explainer found for scenario {scen} or default.")
 
-    # Convert numeric columns where possible
-    for c in df.columns:
-        if c not in ["ScenarioOption", "PopOpt", "DietOpt", "ProdOpt"]:
-            df[c] = pd.to_numeric(df[c], errors="coerce")
+        SANKEY_NODE_COLORS = {
+            "Electricity": "#2563eb", "Natural Gas": "#0ea5e9", "Heat": "#ea580c",
+            "Crude Oil": "#f59e0b", "Biomass": "#16a34a", "Solar": "#fbbf24",
+            "Hydrogen": "#a855f7", "Ethanol": "#22c55e", "Synthetic Fuels": "#06b6d4",
+            "Electricity Generation": "#93c5fd", "Heat Generation": "#fdba74",
+            "Oil Refining": "#fcd34d", "Synthetic Fuels Module": "#99f6e4",
+            "Transmission and Distribution": "#cbd5e1",
+            "Residential": "#111827", "Industry": "#374151", "Agriculture": "#4b5563",
+            "Service Tertiary Sector": "#6b7280", "Passenger Transportation": "#9ca3af",
+            "Freight Transportation": "#9ca3af", "Maritime": "#9ca3af",
+            "Energy Product Industry": "#6b7280", "Hydrogen Generation": "#a78bfa",
+            "Losses": "#d1d5db", "Exports": "#d1d5db", "Waste": "#d1d5db",
+        }
 
-    return df
+        try:
+            links_df, node_order = build_sankey_from_balance(df_energy_balance, scenario=selected_scenario)
+            if links_df.empty:
+                st.info(f"No links could be derived for scenario: {selected_scenario}.")
+            else:
+                render_sankey(
+                    links_df,
+                    title=f"{selected_scenario} – Energy Generation → Consumption",
+                    node_order=node_order,
+                    full_width=True,
+                    height=720,
+                    label_wrap=14,
+                    node_colors=SANKEY_NODE_COLORS,
+                )
+        except Exception as e:
+            st.error(f"Failed to build Sankey: {e}")
 
 with tab9:
     scen = (selected_scenario or "").strip().upper()
+    from views.charts import load_biofuels_data, render_biofuels_base_charts, render_biofuels_interactive_controls
 
-    # Scenario-specific explainer (optional Markdown)
-    scen_file = BASE_DIR / "content" / f"biofuels_explainer_{scen}.md"
-    default_file = BASE_DIR / "content" / "biofuels_explainer.md"
-
-    text = None
-    if scen_file.exists():
-        text = scen_file.read_text(encoding="utf-8")
-    elif default_file.exists():
-        text = default_file.read_text(encoding="utf-8")
-
+    # --- Markdown explainer ---
+    text = load_scenario_md("biofuels_explainer", scen)
     if text:
         st.markdown(text, unsafe_allow_html=True)
 
     # --- INTERACTIVE MODE ---
     if scen == "INTERACTIVE":
-        from views.charts import render_biofuels_interactive_controls
         render_biofuels_interactive_controls("Biofuels")
 
     # --- NON-INTERACTIVE MODES (BAU / NCNC) ---
     else:
         scen_key = "BAU" if scen == "BAU" else "NCNC"
 
-        # --------------------------------------------------
-        # Load biofuels data from the Excel file
-        # --------------------------------------------------
-        from views.charts import load_biofuels_data
-        import plotly.express as px
-        import pandas as pd
-
-        data = load_biofuels_data("data/LEAP_biofuels.xlsx")
+        # ✅ Use the same unified loader used by interactive mode
+        data = load_biofuels_data()
         prod, exports = data["production"], data["exports"]
 
-        # --------------------------------------------------
-        # Layout: two columns
-        # --------------------------------------------------
-        col1, col2 = st.columns(2)
-
-        # ==================================================
-        # (a) DEMAND vs POTENTIAL SUPPLY
-        # ==================================================
-        with col1:
-            demand_col = "Demand_BAU_ktoe" if scen_key == "BAU" else "Demand_NCNC_ktoe"
-
-            bars = prod.melt(
-                id_vars=["Year"],
-                value_vars=["MinProd_ktoe", "MaxProd_ktoe"],
-                var_name="Component",
-                value_name="Value"
-            )
-            bars["Component"] = bars["Component"].replace({
-                "MinProd_ktoe": "Minimum Production Potential [ktoe]",
-                "MaxProd_ktoe": "Maximum Production Potential [ktoe]",
-            })
-
-            line = prod[["Year", demand_col]].rename(columns={demand_col: "Value"})
-            line["Component"] = "Biofuel Demand [ktoe]"
-
-            render_grouped_bar_and_line(
-                prod_df=bars,
-                demand_df=line,
-                x_col="Year",
-                y_col="Value",
-                category_col="Component",
-                title=f"Biofuels Demand vs Potential Supply ({scen_key})",
-                height=theme.CHART_HEIGHT,
-                y_label="ktoe",
-                key=f"biofuels_demand_supply_{scen_key.lower()}",
-            )
-
-        # ==================================================
-        # (b) POTENTIAL FOR EXPORT
-        # ==================================================
-        with col2:
-            exp_min_col = "MinExport_BAU_ktoe" if scen_key == "BAU" else "MinExport_NCNC_ktoe"
-            exp_max_col = "MaxExport_BAU_ktoe" if scen_key == "BAU" else "MaxExport_NCNC_ktoe"
-
-            exp_df = exports.melt(
-                id_vars=["Year"],
-                value_vars=[exp_min_col, exp_max_col],
-                var_name="Component",
-                value_name="Value"
-            )
-            exp_df["Component"] = exp_df["Component"].replace({
-                exp_min_col: "Min export potential [ktoe]",
-                exp_max_col: "Max export potential [ktoe]",
-            })
-
-            fig2 = px.bar(
-                exp_df,
-                x="Year",
-                y="Value",
-                color="Component",
-                color_discrete_map={
-                    "Min export potential [ktoe]": "#86efac",
-                    "Max export potential [ktoe]": "#22c55e",
-                },
-                title=f"Potential for Biofuels Export ({scen_key})",
-                barmode="group",
-                width=theme.CHART_WIDTH,
-                height=theme.CHART_HEIGHT,
-            )
-            st.plotly_chart(fig2, use_container_width=False, key=f"biofuels_export_{scen_key.lower()}")
+        # ✅ Render using the same consistent chart logic
+        render_biofuels_base_charts(prod, exports, scen_key)
        
 with tab10:
     # Load scenario-specific explainer if it exists
@@ -732,9 +637,6 @@ with tab11:
         fig_u = render_water_band(
             df_u if df_u is not None else pd.DataFrame(),
             title="Urban Water Requirements",
-            avg_col_candidates=["Average"],
-            min_col_candidates=["Min"],
-            max_col_candidates=["Max"],
             y_label="Water Requirements [hm³]",
         )
         st.plotly_chart(fig_u, use_container_width=True, key="urban_water")
@@ -744,9 +646,6 @@ with tab11:
         fig_a = render_water_band(
             df_a if df_a is not None else pd.DataFrame(),
             title="Agriculture Water Requirements",
-            avg_col_candidates=["Average"],
-            min_col_candidates=["Min"],
-            max_col_candidates=["Max"],
             y_label="Water Requirements [hm³]",
         )
         st.plotly_chart(fig_a, use_container_width=True, key="agri_water")
@@ -759,9 +658,6 @@ with tab11:
         fig_i = render_water_band(
             df_i if df_i is not None else pd.DataFrame(),
             title="Industrial Water Requirements",
-            avg_col_candidates=["Average"],
-            min_col_candidates=["Min"],
-            max_col_candidates=["Max"],
             y_label="Water Requirements [hm³]",
         )
         st.plotly_chart(fig_i, use_container_width=True, key="ind_water")
@@ -771,10 +667,6 @@ with tab11:
         fig_m = render_water_monthly_band(
             df_m if df_m is not None else pd.DataFrame(),
             title="Monthly Water Requirements (2020)",
-            month_col_candidates=["Month", "Months"],
-            avg_col_candidates=["Average", "Avg", "Mean"],
-            min_col_candidates=["Min"],
-            max_col_candidates=["Max"],
             y_label="Water Requirements [hm³]",
         )
         st.plotly_chart(fig_m, use_container_width=True, key="monthly_water")
