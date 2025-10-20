@@ -12,6 +12,8 @@ from config import theme
 from pathlib import Path
 BASE_DIR = Path(__file__).parent
 
+import plotly.graph_objects as go
+
 
 # --- Data Models & Utilities
 from models.data_loader import (
@@ -344,8 +346,7 @@ with tab_food:
                 colors=theme.LANDUSE_COLORS,   # ✅ ensure consistent colors for BAU/NCNC
                 key="food_landuse"
             )
-
-
+            
 with tab_energy:
     scen = (selected_scenario or "").strip().upper()
 
@@ -731,7 +732,7 @@ with tab_about:
             st.warning("sdsn_explainer.md exists but is empty.")
     else:
         st.warning("⚠️ content/sdsn.md not found.")
-        
+
 with tab_custom:
     st.header("Custom")
     

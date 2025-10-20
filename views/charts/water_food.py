@@ -165,10 +165,11 @@ def render_fable_interactive_controls(tab_name="Food & Land"):
     st.subheader(f"{tab_name} – Interactive Scenario Builder")
 
     with st.expander("ℹ️ About the FABLE Calculator"):
-        st.markdown("""
-        Explore sensitivities for **Population**, **Diet**, and **Productivity** assumptions.
-        Use the dropdowns below to explore how these drivers affect food demand, land use,
-        and agricultural emissions.
+        st.markdown("""Here, the users can explore different data and variables, and interactively see the results from our models.
+        
+        FABLE Calculator uses CORINE national land cover baseline, FAOSTAT crop yields (historical & trend), livestock numbers, food demand projections, at an annual time-step, to estimate food-land systems pathways to 2050. Its huge scenario explorer uses national population and GDP projections based on the Shared Socioeconomic Pathways (SSPs); Dietary choices imply a basic uptake in ingredients/products which are defined by SSPs, EAT Lancet Diet, or other custom scenarios; Different default rates of crop, livestock productivity (low, middle, high), are included.
+        
+        The FABLE Calculator offers a portfolio of more than 1.5 billion pathways (a combination of in-build scenarios through changing different assumption variables on climate conditions, economic and agricultural policy, regulation and demographics). Here, the key driving factors of the demand (since the tool is demand-based), can be explored:
         """)
 
     col1, col2, col3 = st.columns(3)
@@ -227,13 +228,38 @@ def render_fable_interactive_controls(tab_name="Food & Land"):
     **Option C – Low growth:** +30–40% yield gap closure; lower productivity increase."""
         )
 
-
-    st.markdown(f"**Selected combination:** `{pop}-{diet}-{prod}`")
-
     try:
         render_fable_interactive_charts(pop, diet, prod)
     except Exception as e:
         st.error(f"❌ Could not render charts for {pop}-{diet}-{prod}: {e}")
+
+    # ============================================================================
+    # SENSITIVITY ANALYSIS SECTION
+    # ============================================================================
+    st.markdown("---")
+
+    with st.expander("📊 Sensitivity Analysis by Main Demand Drivers", expanded=False):
+        df_sensitivity = load_fable_sensitivity()
+
+        metrics = [
+            ('GHG_total', 'GHG total (MtCO2e)', 'GHG total (MtCO2e)'),
+            ('TotalCost', 'Total Cost (M€)', 'Total Cost (M€)'),
+            ('Cropland', 'Cropland (kha)', 'Cropland (kha)'),
+            ('Pasture', 'Pasture (kha)', 'Pasture (kha)'),
+            ('OtherLand', 'Other Land (kha)', 'Other Land (kha)')
+        ]
+
+        col1, col2 = st.columns(2)
+
+        for idx, (metric, ylabel, title) in enumerate(metrics):
+            fig = create_sensitivity_boxplot(df_sensitivity, metric, ylabel, title)
+            
+            if idx % 2 == 0:
+                with col1:
+                    st.plotly_chart(fig, use_container_width=True)
+            else:
+                with col2:
+                    st.plotly_chart(fig, use_container_width=True)
 
 def render_fable_interactive_charts(pop: str, diet: str, prod: str):
     """Filter the combos sheet for the chosen Option (A/B/C) and render 3 charts."""
@@ -254,8 +280,6 @@ def render_fable_interactive_charts(pop: str, diet: str, prod: str):
     # ✅ Fix 'Year' column variations
     if "year" in [c.lower() for c in df.columns]:
         df.rename(columns={c: "Year" for c in df.columns if c.lower() == "year"}, inplace=True)
-
-    st.markdown(f"### Results for Option {pop}-{diet}-{prod}")
 
     # ---- Column resolution helpers (case-insensitive) ----
     def _pick(df_, candidates):
@@ -430,8 +454,7 @@ def _load_water_scenario(path: str, sheet: str) -> dict[str, pd.DataFrame]:
     except Exception as e:
         st.warning(f"❌ Could not load water scenario {sheet}: {e}")
         return {"urban": pd.DataFrame(), "agriculture": pd.DataFrame(), "industrial": pd.DataFrame()}
-
-
+   
 def render_land_water_interactive_controls(section_title: str):
     """
     Render interactive controls for Land & Water Requirements tab.
@@ -595,5 +618,72 @@ def render_land_water_interactive_controls(section_title: str):
             st.image(str(img_path), width=800, caption="Sensitivity of water requirements to SSP assumptions.")
         else:
             st.info("⚠️ water_sensitivity.png not found in content/ folder.")
+
+@st.cache_data(show_spinner=False)
+def load_fable_sensitivity():
+    """Load FABLE sensitivity analysis data from Excel"""
+    df = pd.read_excel(
+        'data/Fable_results_combos.xlsx',
+        sheet_name='Sensitivity2',
+        header=0
+    )
+    
+    # Rename columns to match code (remove units from headers)
+    df.columns = ['InputSet', 'Option', 'GHG_total', 'TotalCost', 
+                'Cropland', 'Pasture', 'OtherLand']
+    
+    # Rename for consistency
+    df['Driver'] = df['InputSet']
+    
+    return df
+
+
+def create_sensitivity_boxplot(df, metric, ylabel, title):
+    """Create box plot for sensitivity analysis"""
+    fig = go.Figure()
+    
+    drivers = ['Population/GDP', 'Diets', 'Productivity']
+    
+    for driver in drivers:
+        df_driver = df[df['Driver'] == driver]
+        values = df_driver[metric].values
+        mean_val = values.mean()
+        
+        fig.add_trace(go.Box(
+            y=values,
+            name=driver,
+            boxmean=True,
+            marker=dict(
+                color='rgba(0,0,0,0)',
+                line=dict(color='black', width=1)
+            ),
+            line=dict(color='black'),
+            fillcolor='white',
+            showlegend=False
+        ))
+        
+        # Add mean point (orange)
+        fig.add_trace(go.Scatter(
+            x=[driver],
+            y=[mean_val],
+            mode='markers',
+            marker=dict(color='orange', size=8),
+            showlegend=False,
+            hovertemplate=f'Mean: {mean_val:.2f}<extra></extra>'
+        ))
+    
+    fig.update_layout(
+        title=dict(text=title, x=0.5, xanchor='center', font=dict(size=12)),
+        yaxis_title=ylabel,
+        xaxis_title='',
+        height=300,
+        margin=dict(l=60, r=20, t=40, b=40),
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        xaxis=dict(showgrid=False),
+        yaxis=dict(showgrid=True, gridcolor='lightgray')
+    )
+    
+    return fig
 
 
