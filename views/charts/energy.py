@@ -5,6 +5,7 @@ from pathlib import Path
 from config import theme
 from models.data_loader import load_and_prepare_excel, aggregate_to_periods
 from .generic import render_bar_chart
+import plotly.graph_objects as go
 
 @st.cache_data(show_spinner=False)
 def load_energy_interactive_data(scenario_code: str):
@@ -90,7 +91,7 @@ def render_energy_interactive_charts(tab_name: str, ssp: str, renew: str):
         st.warning(f"No data found for scenario {scenario_code}.")
         return
 
-    st.markdown(f"### Results for Option {ssp}–{renew}")
+    #st.markdown(f"### Results for Option {ssp}–{renew}")
     st.caption("Charts update automatically based on your selections.")
 
     cols_sectors = [
@@ -142,7 +143,7 @@ def _load_energy_sensitivity_sheets() -> dict[str, pd.DataFrame]:
     out = {}
     for key, p in paths.items():
         try:
-            df = pd.read_excel(p, sheet_name="Sheet2")
+            df = pd.read_excel(p, sheet_name="Sheet1")
             df.columns = df.columns.map(str).str.strip()
             if "Scenario" in df.columns:
                 df["Scenario"] = df["Scenario"].astype(str).str.strip().str.upper()
@@ -152,11 +153,95 @@ def _load_energy_sensitivity_sheets() -> dict[str, pd.DataFrame]:
     return out
 
 def render_energy_sensitivity_summary():
-    st.subheader("📈 Sensitivity Summary")
-    img = Path("content/leap_sensitivity.png")
-    if img.exists():
-        with st.expander("Show sensitivity summary", expanded=False):
-            st.image(str(img), width=600)
-            st.caption("Relative contribution of SSP and renewables uptake assumptions.")
-    else:
-        st.info("Sensitivity summary image not found.")
+    """Render interactive box plots for energy sensitivity analysis"""
+    
+    with st.expander("📈 Sensitivity Summary", expanded=False):
+        # Load sensitivity data
+        sheets = _load_energy_sensitivity_sheets()
+        df_cons = sheets.get("cons", pd.DataFrame())
+        df_supply = sheets.get("supply", pd.DataFrame())
+        
+        if df_cons.empty and df_supply.empty:
+            st.warning("No sensitivity data available.")
+            return
+        
+        st.markdown("#### Sensitivity of energy consumption across sectors (ktoe)")
+        
+        # Consumption sectors (8 plots in 4 columns)
+        consumption_cols = [
+            'Residential', 'Agriculture', 'Industry', 'Energy Products',
+            'Passenger Transportation', 'Freight Transportation', 'Maritime', 'Services'
+        ]
+        
+        col1, col2, col3, col4 = st.columns(4)
+        cols = [col1, col2, col3, col4]
+        
+        for idx, col_name in enumerate(consumption_cols):
+            if col_name in df_cons.columns:
+                fig = _create_sensitivity_boxplot(df_cons, col_name, 'ktoe', col_name)
+                with cols[idx % 4]:
+                    st.plotly_chart(fig, use_container_width=True, key=f"sens_cons_{col_name}")
+        
+        st.markdown("#### Sensitivity of energy supply for main fuels (ktoe)")
+        
+        # Supply sectors (3 plots in 3 columns)
+        supply_cols = ['Electricity Generation', 'Heat Generation', 'Oil Refining']
+        
+        col1, col2, col3 = st.columns(3)
+        cols_supply = [col1, col2, col3]
+        
+        for idx, col_name in enumerate(supply_cols):
+            if col_name in df_supply.columns:
+                fig = _create_sensitivity_boxplot(df_supply, col_name, 'ktoe', col_name)
+                with cols_supply[idx]:
+                    st.plotly_chart(fig, use_container_width=True, key=f"sens_supply_{col_name}")
+
+def _create_sensitivity_boxplot(df, column, ylabel, title):
+    """Create box plot for energy sensitivity analysis using all years per scenario"""
+    fig = go.Figure()
+    
+    # Get unique scenarios
+    scenarios = df['Scenario'].unique()
+    
+    # Create one box per scenario using all year values
+    for scenario in scenarios:
+        scenario_data = df[df['Scenario'] == scenario]
+        values = scenario_data[column].values
+        
+        fig.add_trace(go.Box(
+            y=values,
+            name=scenario,
+            boxmean=True,
+            marker=dict(
+                color='rgba(200,200,200,0.5)',
+                line=dict(color='black', width=1)
+            ),
+            line=dict(color='black'),
+            fillcolor='rgba(200,200,200,0.3)',
+            showlegend=False
+        ))
+    
+    # Add overall mean (red diamond) at first scenario position
+    overall_mean = df[column].mean()
+    fig.add_trace(go.Scatter(
+        x=[scenarios[0]],
+        y=[overall_mean],
+        mode='markers',
+        marker=dict(color='red', size=10, symbol='diamond'),
+        showlegend=False,
+        hovertemplate=f'Overall Mean: {overall_mean:.1f}<extra></extra>'
+    ))
+    
+    fig.update_layout(
+        title=dict(text=title, x=0.5, xanchor='center', font=dict(size=11)),
+        yaxis_title=ylabel,
+        xaxis_title='',
+        height=280,
+        margin=dict(l=50, r=20, t=35, b=30),
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        xaxis=dict(showgrid=False),
+        yaxis=dict(showgrid=True, gridcolor='lightgray')
+    )
+    
+    return fig
