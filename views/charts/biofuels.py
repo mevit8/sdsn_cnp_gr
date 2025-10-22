@@ -6,7 +6,7 @@ from config import theme
 from .generic import render_grouped_bar_and_line
 
 @st.cache_data(show_spinner=False)
-def load_biofuels_data(path: str = "data/LEAP_biofuels.xlsx") -> dict[str, pd.DataFrame]:
+def load_biofuels_data(path: str = "data/LEAP_Biofuels.xlsx") -> dict[str, pd.DataFrame]:
     """Load biofuels data from the cleaned multi-sheet Excel file."""
     prod = pd.read_excel(path, sheet_name="Production")
     exports = pd.read_excel(path, sheet_name="Export")
