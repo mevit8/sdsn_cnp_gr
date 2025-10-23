@@ -101,7 +101,7 @@ def render_biofuels_base_charts(prod: pd.DataFrame, exports: pd.DataFrame, scen_
         st.plotly_chart(fig2, use_container_width=False, key=f"biofuels_export_{scen_key.lower()}")
 
 def render_biofuels_interactive_controls(tab_name: str):
-    st.header(f"{tab_name} — Interactive Biofuels Scenarios")
+    # st.header(f"{tab_name} — Interactive Biofuels Scenarios")
 
     with st.expander("ℹ️ About the Biofuels Explorer"):
         st.markdown("Explore potential **production** and **export** under different assumptions.")

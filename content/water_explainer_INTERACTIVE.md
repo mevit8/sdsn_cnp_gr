@@ -1,0 +1,2 @@
+The implementation of any decarbonization pathway is going to require some additional capacity for renewables:
+Select a value you would like to test for additional solar power, wind power (onshore farms) and see the area and cost requirements.

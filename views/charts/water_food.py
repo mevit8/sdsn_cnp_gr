@@ -165,11 +165,8 @@ def render_fable_interactive_controls(tab_name="Food & Land"):
     st.subheader(f"{tab_name} – Interactive Scenario Builder")
 
     with st.expander("ℹ️ About the FABLE Calculator"):
-        st.markdown("""Here, the users can explore different data and variables, and interactively see the results from our models.
-        
-        FABLE Calculator uses CORINE national land cover baseline, FAOSTAT crop yields (historical & trend), livestock numbers, food demand projections, at an annual time-step, to estimate food-land systems pathways to 2050. Its huge scenario explorer uses national population and GDP projections based on the Shared Socioeconomic Pathways (SSPs); Dietary choices imply a basic uptake in ingredients/products which are defined by SSPs, EAT Lancet Diet, or other custom scenarios; Different default rates of crop, livestock productivity (low, middle, high), are included.
-        
-        The FABLE Calculator offers a portfolio of more than 1.5 billion pathways (a combination of in-build scenarios through changing different assumption variables on climate conditions, economic and agricultural policy, regulation and demographics). Here, the key driving factors of the demand (since the tool is demand-based), can be explored:
+        st.markdown("""Here, the users can explore different data and variables, and interactively see the results from our models.  
+**FABLE Calculator** uses CORINE national land cover baseline, FAOSTAT crop yields (historical & trend), livestock numbers, food demand projections, at an annual time-step, to estimate food-land systems pathways to 2050. Its huge scenario explorer uses national population and GDP projections based on the Shared **Socioeconomic Pathways** (SSPs); Dietary choices imply a basic uptake in ingredients/products which are defined by SSPs, EAT Lancet Diet, or other custom scenarios; Different default rates of crop, livestock productivity (low, middle, high), are included. The FABLE Calculator offers a portfolio of more than 1.5 billion pathways (a combination of in-build scenarios through changing different assumption variables on climate conditions, economic and agricultural policy, regulation and demographics). Here, the key driving factors of the demand (since the tool is demand-based), can be explored:
         """)
 
     col1, col2, col3 = st.columns(3)
@@ -462,12 +459,18 @@ def render_land_water_interactive_controls(section_title: str):
     1. Land requirements for renewable energy (solar/wind)
     2. Water requirements by SSP scenario
     """
-    st.subheader(f"{section_title} – Interactive Scenario Builder")
+    st.subheader(f"{section_title}")
+
+    from pathlib import Path
+    explainer_path = Path("content/water_explainer_INTERACTIVE.md")
+    if explainer_path.exists():
+        with st.expander("ℹ️ About the Land & Water Requirements Explorer", expanded=False):
+            st.markdown(explainer_path.read_text(encoding="utf-8"), unsafe_allow_html=True)
     
     # =========================================================================
     # SECTION 1: LAND REQUIREMENTS FOR RENEWABLE ENERGY
     # =========================================================================
-    st.markdown("### 🌱 Land Requirements for Renewable Energy Expansion")
+    st.markdown("### Land Requirements for Renewable Energy Expansion")
     
     col_solar, col_wind = st.columns(2)
     

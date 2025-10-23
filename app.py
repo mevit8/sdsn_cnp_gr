@@ -530,7 +530,8 @@ with tab_biofuels:
     # --- Markdown explainer ---
     text = load_scenario_md("biofuels_explainer", scen)
     if text:
-        st.markdown(text, unsafe_allow_html=True)
+        with st.expander("ℹ️ About the Biofuels Calculator"):
+            st.markdown(text, unsafe_allow_html=True)
 
     # --- INTERACTIVE MODE ---
     if scen == "INTERACTIVE":
@@ -576,11 +577,7 @@ with tab_shipping:
     
     # Load scenario-specific explainer
     text = load_scenario_md("ships_explainer", selected_scenario)
-    if text:
-        st.markdown(text, unsafe_allow_html=True)
-    else:
-        st.warning("No Ships explainer found for this scenario.")
-    
+
     # --- INTERACTIVE MODE ---
     if scen == "INTERACTIVE":
         from views.charts import render_ships_interactive_controls
@@ -656,13 +653,6 @@ with tab_shipping:
 with tab_water:
     scen = (selected_scenario or "").strip().upper()
 
-    # Load explainer
-    text = load_scenario_md("water_explainer", scen)
-    if text:
-        st.markdown(text, unsafe_allow_html=True)
-    else:
-        st.warning("No Water explainer found for this scenario.")
-
     # --- INTERACTIVE MODE ---
     if scen == "INTERACTIVE":
         from views.charts import render_land_water_interactive_controls
@@ -670,6 +660,13 @@ with tab_water:
     
     # --- BAU / NCNC MODES (existing charts) ---
     else:
+        # ✅ Load explainer ONLY for BAU/NCNC
+        text = load_scenario_md("water_explainer", scen)
+        if text:
+            st.markdown(text, unsafe_allow_html=True)
+        else:
+            st.warning("No Water explainer found for this scenario.")
+        
         try:
             water = load_water_requirements()
         except Exception as e:

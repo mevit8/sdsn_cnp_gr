@@ -1,0 +1,1 @@
+Different fuel phase out, different on-ship mitigation technologies, and different levels of emissions policy control, can shape the optimal pathway of the fleet. Select any scenario from the list below to explore the results:

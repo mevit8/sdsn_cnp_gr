@@ -158,6 +158,11 @@ def render_ships_interactive_controls(section_title: str):
     Allows users to select from 20 different scenarios and see all 8 charts update dynamically.
     """
     st.subheader(f"{section_title} – Interactive Scenario Builder")
+
+    explainer_path = Path("content/ships_explainer_INTERACTIVE.md")
+    if explainer_path.exists():
+        with st.expander("ℹ️ About the Maritime Interactive Explorer", expanded=False):
+            st.markdown(explainer_path.read_text(encoding="utf-8"), unsafe_allow_html=True)
     
     # Define all 20 scenarios with descriptions
     SCENARIOS = {
